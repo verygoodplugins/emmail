@@ -76,7 +76,9 @@ describe("D1 repositories", () => {
     expect(snapshot.skippedSuppressed).toBe(1);
 
     const recipients = await campaigns.listRecipientsForSend(campaign.id, 10);
-    expect(recipients.map((recipient) => recipient.email)).toEqual(["ada@example.com", "grace@example.com"]);
+    // Ordering ties on created_at break on the random recipient id — stable
+    // across retries of the same batch, but not alphabetical.
+    expect(recipients.map((recipient) => recipient.email).sort()).toEqual(["ada@example.com", "grace@example.com"]);
   });
 
   it("applies batch send results atomically with the batch marker", async () => {
