@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "emmail-worker",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["wrangler", "dev", "--local"],
+      "port": 8787
+    }
+  ]
+}
