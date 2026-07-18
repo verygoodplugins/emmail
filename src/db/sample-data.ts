@@ -455,7 +455,6 @@ export async function clearSampleData(db: D1Database): Promise<SampleDataSummary
   const status = await getSampleDataStatus(db);
   await deleteSampleEvents(db);
   await deleteSuppressions(db);
-  await deleteByIds(db, "send_jobs", "campaign_id", ids(sampleCampaigns));
   await deleteByIds(db, "campaign_recipients", "id", ids(sampleRecipients));
   await deleteByIds(db, "campaign_links", "id", ids(sampleLinks));
   await deleteByIds(db, "campaigns", "id", ids(sampleCampaigns));

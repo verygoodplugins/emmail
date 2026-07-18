@@ -27,6 +27,11 @@ npm run db:migrate:local
 npm run worker:dev
 ```
 
+Admin auth fails closed: without `EMMAIL_ADMIN_TOKEN` set (in `.dev.vars`
+locally, as a secret in production) every admin page and `/api/*` route
+returns 401. `.dev.vars.example` ships a dummy local token; older `.dev.vars`
+copies need the line added by hand.
+
 The backend runs at `http://localhost:8787`. The Vite-only admin shell runs at `http://127.0.0.1:5173` with:
 
 ```bash
@@ -64,9 +69,28 @@ npx wrangler secret put EMMAIL_ADMIN_TOKEN
 
 Set `APP_BASE_URL`, `DEFAULT_FROM_EMAIL`, `DEFAULT_FROM_NAME`, and `EMMAIL_SEND_MODE` in `wrangler.toml` for the deployed domain and verified Resend sender. The current deploy uses the `workers.dev` fallback URL because the active Cloudflare token cannot attach the preferred `southandozarks.autojack.ai/_emmail/*` route yet. Keep `EMMAIL_SEND_MODE=dry-run` until a real Resend key is set and the integration loop is verified.
 
+## Sending
+
+`POST /api/campaigns/:id/send` snapshots the audience into
+`campaign_recipients` and enqueues one queue message. The consumer drains
+pending recipients in Resend batches of up to 100, re-enqueueing a
+continuation message after each batch until none remain, then marks the
+campaign `sent`. Each batch's Resend idempotency key is derived from
+`campaigns.last_completed_batch`, which only advances in the same atomic D1
+batch that records the outcomes — queue redeliveries re-send the identical
+payload instead of duplicating or skipping recipients.
+
+Re-POSTing `/send` is safe and doubles as the recovery path: it enqueues a
+new drain message whenever recipients are still `pending` (for example after
+a lost queue message), and is a no-op once the campaign has fully drained.
+
+`GET /api/campaigns/:id/stats` returns the recipient rollup
+(`total/sent/delivered/opened/clicked/pending/failed`); `pending` is the live
+send progress.
+
 ## Admin
 
-The preferred production setup is Cloudflare Access protecting the admin route. The current `workers.dev` fallback uses `EMMAIL_ADMIN_TOKEN` as a temporary Worker-level admin gate because the active Cloudflare token cannot attach the preferred zone route yet.
+The preferred production setup is Cloudflare Access protecting the admin route. The current `workers.dev` fallback uses `EMMAIL_ADMIN_TOKEN` as a Worker-level admin gate; if the token is unset, admin access is denied entirely (fail closed), so set the secret before deploying.
 
 Admin surfaces:
 
@@ -84,6 +108,8 @@ Admin surfaces:
 - `POST /api/sample-data/seed`
 - `POST /api/sample-data/clear`
 - `POST /api/integrations/southandozarks/contact-message`
+- `POST /api/campaigns/:id/send` (snapshot + enqueue/resume)
+- `GET /api/campaigns/:id/stats` (recipient rollup + send progress)
 
 ## Public Endpoints
 

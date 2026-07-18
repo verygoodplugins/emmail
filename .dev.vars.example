@@ -6,3 +6,4 @@ APP_BASE_URL=http://localhost:8787
 DEFAULT_FROM_EMAIL=southandozarks@autojack.ai
 DEFAULT_FROM_NAME=EmMail
 EMMAIL_SEND_MODE=dry-run
+EMMAIL_ADMIN_TOKEN=local_admin_token_change_me

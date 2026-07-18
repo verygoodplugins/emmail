@@ -1,4 +1,4 @@
-import type { Campaign, CampaignEvent, ContactRow, CsvPreview, SampleDataSummary } from "./types";
+import type { Campaign, CampaignEvent, CampaignStats, ContactRow, CsvPreview, SampleDataSummary } from "./types";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(appPath(path), {
@@ -56,6 +56,10 @@ export function sendCampaign(campaignId: string): Promise<{ createdRecipients: n
 
 export function listEvents(campaignId: string): Promise<CampaignEvent[]> {
   return requestJson<CampaignEvent[]>(`/api/campaigns/${campaignId}/events`);
+}
+
+export function getCampaignStats(campaignId: string): Promise<CampaignStats> {
+  return requestJson<CampaignStats>(`/api/campaigns/${campaignId}/stats`);
 }
 
 export function seedSampleData(): Promise<SampleDataSummary> {

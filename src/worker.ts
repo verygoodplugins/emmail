@@ -1,4 +1,4 @@
-import type { Env } from "./env";
+import type { CampaignSendMessage, Env } from "./env";
 import { Resend } from "resend";
 import { CampaignRepository } from "./db/campaign-repository";
 import { ContactRepository } from "./db/contact-repository";
@@ -122,11 +122,20 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const campaignId = campaignSendMatch[1];
       const campaigns = new CampaignRepository(env.DB);
       const snapshot = await campaigns.snapshotAudience(campaignId);
-      const queuedJobs = snapshot.createdRecipients > 0 ? 1 : 0;
+      // Enqueue whenever recipients are pending, not just when the snapshot
+      // created new ones — re-posting /send resumes a campaign whose queue
+      // message was lost.
+      const pendingRecipients = await campaigns.countRecipientsByStatus(campaignId, "pending");
+      const queuedJobs = pendingRecipients > 0 ? 1 : 0;
       if (queuedJobs) {
         await env.SEND_QUEUE.send({ campaignId, limit: 100 });
       }
-      return json({ ...snapshot, queuedJobs });
+      return json({ ...snapshot, pendingRecipients, queuedJobs });
+    }
+
+    const campaignStatsMatch = path.match(/^\/api\/campaigns\/([^/]+)\/stats$/);
+    if (request.method === "GET" && campaignStatsMatch) {
+      return json(await new CampaignRepository(env.DB).getCampaignStats(campaignStatsMatch[1]));
     }
 
     const campaignEventsMatch = path.match(/^\/api\/campaigns\/([^/]+)\/events$/);
@@ -171,15 +180,21 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
 export default {
   fetch: handleRequest,
-  async queue(batch: MessageBatch, env: Env): Promise<void> {
+  async queue(batch: MessageBatch<CampaignSendMessage>, env: Env): Promise<void> {
     const resend = new Resend(env.RESEND_API_KEY);
     for (const message of batch.messages) {
-      await processCampaignSend(env, message.body as { campaignId: string; limit: number }, {
-        sendBatch: async (messages, options) => {
-          const response = await resend.batch.send(messages, { idempotencyKey: options.idempotencyKey });
-          return { data: response.data?.data ?? null, error: response.error };
-        }
-      });
+      try {
+        await processCampaignSend(env, message.body, {
+          sendBatch: async (messages, options) => {
+            const response = await resend.batch.send(messages, { idempotencyKey: options.idempotencyKey });
+            return { data: response.data?.data ?? null, error: response.error };
+          }
+        });
+        message.ack();
+      } catch (error) {
+        console.error("Campaign send message failed", error);
+        message.retry();
+      }
     }
   }
 };
@@ -189,9 +204,13 @@ function json(body: unknown, status = 200): Response {
 }
 
 async function requiresAdminAuth(request: Request, env: Env, path: string): Promise<boolean> {
-  const token = env.EMMAIL_ADMIN_TOKEN;
-  if (!token || isPublicPath(request.method, path)) {
+  if (isPublicPath(request.method, path)) {
     return false;
+  }
+  const token = env.EMMAIL_ADMIN_TOKEN;
+  if (!token) {
+    // Fail closed: an unset admin token means no admin access, not open access.
+    return true;
   }
   return !(await hasAdminAccess(request, token));
 }
@@ -223,7 +242,7 @@ async function hasAdminAccess(request: Request, token: string): Promise<boolean>
 
 async function handleAdminLogin(request: Request, env: Env, basePath: string): Promise<Response> {
   if (!env.EMMAIL_ADMIN_TOKEN) {
-    return Response.redirect(loginRedirectTarget(basePath), 302);
+    return adminLoginPage(basePath, "Admin access is disabled: EMMAIL_ADMIN_TOKEN is not configured.");
   }
 
   if (request.method === "GET") {
@@ -238,28 +257,31 @@ async function handleAdminLogin(request: Request, env: Env, basePath: string): P
   const token = String(form.get("token") ?? "");
   const ok = await verifySharedSecret(env.EMMAIL_ADMIN_TOKEN, token);
   if (!ok) {
-    return adminLoginPage(basePath, true);
+    return adminLoginPage(basePath, "Invalid admin token.");
   }
 
   const cookiePath = basePath || "/";
+  const cookieParts = [
+    `emmail_admin=${await adminSessionValue(env.EMMAIL_ADMIN_TOKEN)}`,
+    `Path=${cookiePath}`,
+    "HttpOnly",
+    "SameSite=Lax",
+    "Max-Age=604800"
+  ];
+  if (env.APP_BASE_URL.startsWith("https://")) {
+    cookieParts.push("Secure");
+  }
   return new Response(null, {
     status: 302,
     headers: {
       location: loginRedirectTarget(basePath),
-      "set-cookie": [
-        `emmail_admin=${await adminSessionValue(env.EMMAIL_ADMIN_TOKEN)}`,
-        `Path=${cookiePath}`,
-        "HttpOnly",
-        "Secure",
-        "SameSite=Lax",
-        "Max-Age=604800"
-      ].join("; "),
+      "set-cookie": cookieParts.join("; "),
       "cache-control": "no-store"
     }
   });
 }
 
-function adminLoginPage(basePath: string, invalid = false): Response {
+function adminLoginPage(basePath: string, message = ""): Response {
   const action = `${basePath}/login`.replace(/^\/\//, "/");
   return new Response(`<!doctype html>
 <html lang="en">
@@ -281,7 +303,7 @@ function adminLoginPage(basePath: string, invalid = false): Response {
 <body>
   <main>
     <h1>EmMail Admin</h1>
-    <p>${invalid ? "Invalid admin token." : ""}</p>
+    <p>${escapeHtml(message)}</p>
     <form method="post" action="${escapeHtml(action)}">
       <input name="token" type="password" autocomplete="current-password" placeholder="Admin token" autofocus>
       <button type="submit">Continue</button>

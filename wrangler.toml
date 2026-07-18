@@ -36,6 +36,11 @@ queue = "emmail-southandozarks-send"
 queue = "emmail-southandozarks-send"
 max_batch_size = 10
 max_batch_timeout = 30
+# Single-flight consumer: batch continuation derives its Resend idempotency
+# key from campaigns.last_completed_batch, which assumes no two consumers
+# process the same campaign concurrently.
+max_concurrency = 1
+max_retries = 3
 
 [observability]
 enabled = true

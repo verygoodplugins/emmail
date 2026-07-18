@@ -13,11 +13,12 @@ import {
   Trash2,
   Upload
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   clearSampleData,
   commitImport,
   createCampaign,
+  getCampaignStats,
   listCampaigns,
   listContacts,
   listEvents,
@@ -25,7 +26,7 @@ import {
   seedSampleData,
   sendCampaign
 } from "./api";
-import type { Campaign, CampaignEvent, ContactRow, CsvPreview } from "./types";
+import type { Campaign, CampaignEvent, CampaignStats, ContactRow, CsvPreview } from "./types";
 
 type Tab = "contacts" | "imports" | "campaigns" | "events";
 
@@ -36,6 +37,7 @@ export function App() {
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [events, setEvents] = useState<CampaignEvent[]>([]);
+  const [stats, setStats] = useState<CampaignStats | null>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState("");
   const [csv, setCsv] = useState(seedCsv);
   const [preview, setPreview] = useState<CsvPreview | null>(null);
@@ -60,11 +62,11 @@ export function App() {
   useEffect(() => {
     if (selectedCampaignId) {
       void listEvents(selectedCampaignId).then(setEvents).catch(() => setEvents([]));
+      void getCampaignStats(selectedCampaignId).then(setStats).catch(() => setStats(null));
     }
-  }, [selectedCampaignId]);
+  }, [selectedCampaignId, campaigns]);
 
   const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId) ?? campaigns[0];
-  const stats = useMemo(() => summarizeEvents(events), [events]);
 
   async function refresh() {
     const [contactRows, campaignRows] = await Promise.all([listContacts(), listCampaigns()]);
@@ -383,8 +385,10 @@ function EventsView(props: {
   selectedCampaignId: string;
   setSelectedCampaignId: (id: string) => void;
   events: CampaignEvent[];
-  stats: { opens: number; clicks: number };
+  stats: CampaignStats | null;
 }) {
+  const openRate = ratePercent(props.stats?.opened, props.stats?.sent);
+  const clickRate = ratePercent(props.stats?.clicked, props.stats?.sent);
   return (
     <>
       <div className="panel">
@@ -396,13 +400,18 @@ function EventsView(props: {
           {props.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
         </select>
         <div className="metric-row">
-          <Metric label="Open rate" value={props.stats.opens} />
-          <Metric label="Click rate" value={props.stats.clicks} tone="amber" />
+          <Metric label="Open rate" value={formatRate(props.stats?.opened, props.stats?.sent)} />
+          <Metric label="Click rate" value={formatRate(props.stats?.clicked, props.stats?.sent)} tone="amber" />
         </div>
         <div className="mini-chart">
-          <span style={{ width: `${Math.min(props.stats.opens * 12, 100)}%` }} />
-          <span style={{ width: `${Math.min(props.stats.clicks * 12, 100)}%` }} />
+          <span style={{ width: `${openRate}%` }} />
+          <span style={{ width: `${clickRate}%` }} />
         </div>
+        <p className="send-progress">
+          {props.stats && props.stats.total > 0
+            ? `${props.stats.sent} sent · ${props.stats.pending} pending · ${props.stats.failed} failed · ${props.stats.total} recipients`
+            : "No recipients yet"}
+        </p>
       </div>
       <div className="panel">
         <div className="panel-head">
@@ -422,7 +431,7 @@ function EventsView(props: {
   );
 }
 
-function Metric({ label, value, tone = "teal" }: { label: string; value: number; tone?: "teal" | "amber" | "coral" }) {
+function Metric({ label, value, tone = "teal" }: { label: string; value: number | string; tone?: "teal" | "amber" | "coral" }) {
   return (
     <div className={`metric ${tone}`}>
       <span>{label}</span>
@@ -448,9 +457,16 @@ function splitAudience(value: string): string[] {
   return value.split(/[;,]/).map((entry) => entry.trim()).filter(Boolean);
 }
 
-function summarizeEvents(events: CampaignEvent[]): { opens: number; clicks: number } {
-  return {
-    opens: events.filter((event) => event.type === "opened").length,
-    clicks: events.filter((event) => event.type === "clicked").length
-  };
+function ratePercent(numerator?: number, denominator?: number): number {
+  if (!numerator || !denominator) {
+    return 0;
+  }
+  return Math.round((numerator / denominator) * 100);
+}
+
+function formatRate(numerator?: number, denominator?: number): string {
+  if (!denominator) {
+    return "—";
+  }
+  return `${ratePercent(numerator, denominator)}%`;
 }

@@ -97,11 +97,119 @@ export class CampaignRepository {
     const result = await this.db.prepare(
       `SELECT * FROM campaign_recipients
        WHERE campaign_id = ? AND status IN (${placeholders})
-       ORDER BY created_at ASC
+       ORDER BY created_at ASC, id ASC
        LIMIT ?`
     ).bind(campaignId, ...statuses, limit).all();
 
     return ((result.results ?? []) as unknown as RecipientRow[]).map(mapRecipient);
+  }
+
+  async countRecipientsByStatus(campaignId: string, status: string): Promise<number> {
+    const row = await this.db.prepare(
+      "SELECT COUNT(*) AS count FROM campaign_recipients WHERE campaign_id = ? AND status = ?"
+    ).bind(campaignId, status).first<{ count: number }>();
+    return Number(row?.count ?? 0);
+  }
+
+  async getCampaignStats(campaignId: string): Promise<CampaignStats> {
+    const row = await this.db.prepare(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(CASE WHEN sent_at IS NOT NULL THEN 1 ELSE 0 END) AS sent,
+         SUM(CASE WHEN delivered_at IS NOT NULL THEN 1 ELSE 0 END) AS delivered,
+         SUM(CASE WHEN opened_at IS NOT NULL THEN 1 ELSE 0 END) AS opened,
+         SUM(CASE WHEN clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS clicked,
+         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
+       FROM campaign_recipients WHERE campaign_id = ?`
+    ).bind(campaignId).first<Record<string, number | null>>();
+
+    return {
+      total: Number(row?.total ?? 0),
+      sent: Number(row?.sent ?? 0),
+      delivered: Number(row?.delivered ?? 0),
+      opened: Number(row?.opened ?? 0),
+      clicked: Number(row?.clicked ?? 0),
+      pending: Number(row?.pending ?? 0),
+      failed: Number(row?.failed ?? 0)
+    };
+  }
+
+  async applySendResults(input: {
+    campaignId: string;
+    batchIndex: number;
+    outcomes: SendOutcome[];
+  }): Promise<void> {
+    const now = nowIso();
+    const statements: D1PreparedStatement[] = [];
+
+    for (const outcome of input.outcomes) {
+      const recipient = outcome.recipient;
+      if (outcome.status === "sent" || outcome.status === "dry-run") {
+        const providerId = outcome.status === "sent" ? outcome.resendEmailId : "dry-run";
+        statements.push(
+          this.db.prepare(
+            "UPDATE campaign_recipients SET status = 'sent', resend_email_id = ?, sent_at = ?, updated_at = ? WHERE id = ?"
+          ).bind(providerId, now, now, recipient.id)
+        );
+        statements.push(this.eventStatement({
+          campaignId: recipient.campaignId,
+          contactId: recipient.contactId,
+          recipientId: recipient.id,
+          type: "send",
+          providerEventId: providerId,
+          metadata: outcome.status === "dry-run" ? { mode: "dry-run" } : {},
+          now
+        }));
+      } else {
+        statements.push(
+          this.db.prepare(
+            "UPDATE campaign_recipients SET status = 'failed', error = ?, updated_at = ? WHERE id = ?"
+          ).bind(outcome.error, now, recipient.id)
+        );
+        statements.push(this.eventStatement({
+          campaignId: recipient.campaignId,
+          contactId: recipient.contactId,
+          recipientId: recipient.id,
+          type: "send_failed",
+          providerEventId: null,
+          metadata: { error: outcome.error },
+          now
+        }));
+      }
+    }
+
+    statements.push(
+      this.db.prepare("UPDATE campaigns SET last_completed_batch = ?, updated_at = ? WHERE id = ?")
+        .bind(input.batchIndex, now, input.campaignId)
+    );
+
+    await this.db.batch(statements);
+  }
+
+  private eventStatement(input: {
+    campaignId: string;
+    contactId: string;
+    recipientId: string;
+    type: string;
+    providerEventId: string | null;
+    metadata: Record<string, unknown>;
+    now: string;
+  }): D1PreparedStatement {
+    return this.db.prepare(
+      `INSERT INTO events
+       (id, campaign_id, contact_id, recipient_id, type, provider_event_id, link_id, url, metadata_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`
+    ).bind(
+      createId("evt"),
+      input.campaignId,
+      input.contactId,
+      input.recipientId,
+      input.type,
+      input.providerEventId,
+      JSON.stringify(input.metadata),
+      input.now
+    );
   }
 
   async getRecipient(recipientId: string): Promise<CampaignRecipient | null> {
@@ -265,7 +373,23 @@ export interface CampaignRecord {
   fromEmail: string;
   audience: { listIds: string[]; tagIds: string[] };
   status: string;
+  lastCompletedBatch: number | null;
 }
+
+export interface CampaignStats {
+  total: number;
+  sent: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  pending: number;
+  failed: number;
+}
+
+export type SendOutcome =
+  | { recipient: CampaignRecipient; status: "sent"; resendEmailId: string }
+  | { recipient: CampaignRecipient; status: "dry-run" }
+  | { recipient: CampaignRecipient; status: "failed"; error: string };
 
 export interface CampaignRecipient {
   id: string;
@@ -286,6 +410,7 @@ interface CampaignRow {
   from_email: string;
   audience_json: string;
   status: string;
+  last_completed_batch: number | null;
 }
 
 interface RecipientRow {
@@ -307,7 +432,10 @@ function mapCampaign(row: CampaignRow): CampaignRecord {
     fromName: row.from_name,
     fromEmail: row.from_email,
     audience: JSON.parse(row.audience_json),
-    status: row.status
+    status: row.status,
+    lastCompletedBatch: row.last_completed_batch === null || row.last_completed_batch === undefined
+      ? null
+      : Number(row.last_completed_batch)
   };
 }
 

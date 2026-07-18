@@ -27,6 +27,16 @@ export interface Campaign {
   status: string;
 }
 
+export interface CampaignStats {
+  total: number;
+  sent: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  pending: number;
+  failed: number;
+}
+
 export interface CampaignEvent {
   id: string;
   type: string;

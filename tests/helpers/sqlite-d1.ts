@@ -1,5 +1,6 @@
 import initSqlJs from "sql.js";
-import migration from "../../migrations/0001_initial.sql?raw";
+import migration0001 from "../../migrations/0001_initial.sql?raw";
+import migration0002 from "../../migrations/0002_send_pipeline.sql?raw";
 
 export async function createSqliteD1(): Promise<D1Database> {
   const SQL = await initSqlJs();
@@ -65,5 +66,6 @@ export async function createSqliteD1(): Promise<D1Database> {
 }
 
 export async function applyMigrations(db: D1Database): Promise<void> {
-  await db.exec(migration);
+  await db.exec(migration0001);
+  await db.exec(migration0002);
 }

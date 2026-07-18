@@ -421,6 +421,12 @@ th {
   background: #d97706;
 }
 
+.send-progress {
+  margin: 0 16px 16px;
+  color: #687078;
+  font-size: 13px;
+}
+
 .panel select {
   margin: 16px;
   width: calc(100% - 32px);

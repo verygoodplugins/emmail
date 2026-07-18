@@ -24,14 +24,17 @@ describe("Worker API", () => {
       DEFAULT_FROM_NAME: "EmMail",
       EMMAIL_INGEST_SECRET: "ingest_secret",
       EMMAIL_SEND_MODE: "live",
-      EMMAIL_ADMIN_TOKEN: ""
+      EMMAIL_ADMIN_TOKEN: "admin_secret"
     };
   });
+
+  const adminAuth = { authorization: "Bearer admin_secret" };
 
   it("previews CSV imports through the admin API", async () => {
     const response = await handleRequest(
       new Request("https://mail.example.com/api/imports/preview", {
         method: "POST",
+        headers: adminAuth,
         body: "email,name\nada@example.com,Ada Lovelace"
       }),
       env
@@ -46,13 +49,13 @@ describe("Worker API", () => {
   it("snapshots and enqueues a campaign send", async () => {
     await handleRequest(new Request("https://mail.example.com/api/imports/commit", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...adminAuth },
       body: JSON.stringify({ csv: "email,name,lists,tags\nada@example.com,Ada Lovelace,Newsletter,vip" })
     }), env);
 
     const createResponse = await handleRequest(new Request("https://mail.example.com/api/campaigns", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...adminAuth },
       body: JSON.stringify({
         name: "June update",
         subject: "June update",
@@ -64,25 +67,68 @@ describe("Worker API", () => {
     const campaign = await createResponse.json() as { id: string };
 
     const sendResponse = await handleRequest(new Request(`https://mail.example.com/api/campaigns/${campaign.id}/send`, {
-      method: "POST"
+      method: "POST",
+      headers: adminAuth
     }), env);
 
     expect(sendResponse.status).toBe(200);
-    await expect(sendResponse.json()).resolves.toMatchObject({ createdRecipients: 1, queuedJobs: 1 });
+    await expect(sendResponse.json()).resolves.toMatchObject({ createdRecipients: 1, pendingRecipients: 1, queuedJobs: 1 });
     expect(env.SEND_QUEUE.send).toHaveBeenCalledWith({ campaignId: campaign.id, limit: 100 });
+  });
+
+  it("re-enqueues a resumed send while recipients are still pending", async () => {
+    const { campaign } = await seedRecipient(env);
+
+    const first = await handleRequest(new Request(`https://mail.example.com/api/campaigns/${campaign.id}/send`, {
+      method: "POST",
+      headers: adminAuth
+    }), env);
+    await expect(first.json()).resolves.toMatchObject({ pendingRecipients: 1, queuedJobs: 1 });
+
+    // No new recipients this time, but the pending one still gets a message —
+    // this is the recovery path for a lost queue message.
+    const resume = await handleRequest(new Request(`https://mail.example.com/api/campaigns/${campaign.id}/send`, {
+      method: "POST",
+      headers: adminAuth
+    }), env);
+    await expect(resume.json()).resolves.toMatchObject({ createdRecipients: 0, pendingRecipients: 1, queuedJobs: 1 });
+    expect(env.SEND_QUEUE.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns recipient rollup stats for a campaign", async () => {
+    const { campaign, recipient } = await seedRecipient(env);
+    const campaigns = new CampaignRepository(env.DB);
+    await campaigns.markRecipientSent(recipient.id, "email_1");
+    await campaigns.markRecipientEvent(recipient.id, "opened");
+
+    const response = await handleRequest(
+      new Request(`https://mail.example.com/api/campaigns/${campaign.id}/stats`, { headers: adminAuth }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      total: 1,
+      sent: 1,
+      delivered: 0,
+      opened: 1,
+      clicked: 0,
+      pending: 0,
+      failed: 0
+    });
   });
 
   it("serves admin assets and APIs under the configured sidecar base path", async () => {
     env.APP_BASE_URL = "https://southandozarks.autojack.ai/_emmail";
 
-    const assetResponse = await handleRequest(new Request("https://southandozarks.autojack.ai/_emmail/"), env);
+    const assetResponse = await handleRequest(new Request("https://southandozarks.autojack.ai/_emmail/", { headers: adminAuth }), env);
     expect(assetResponse.status).toBe(404);
     const assetFetch = env.ASSETS.fetch as ReturnType<typeof vi.fn>;
     const assetRequest = assetFetch.mock.calls[0][0] as Request;
     expect(assetRequest.url).toBe("https://southandozarks.autojack.ai/");
 
     const response = await handleRequest(
-      new Request("https://southandozarks.autojack.ai/_emmail/api/contacts?limit=10&offset=0"),
+      new Request("https://southandozarks.autojack.ai/_emmail/api/contacts?limit=10&offset=0", { headers: adminAuth }),
       env
     );
 
@@ -119,6 +165,29 @@ describe("Worker API", () => {
       headers: { cookie }
     }), env);
     expect(cookieResponse.status).toBe(200);
+  });
+
+  it("denies admin access when no admin token is configured", async () => {
+    env.EMMAIL_ADMIN_TOKEN = "";
+
+    const deniedApi = await handleRequest(new Request("https://mail.example.com/api/contacts"), env);
+    expect(deniedApi.status).toBe(401);
+
+    const deniedAsset = await handleRequest(new Request("https://mail.example.com/"), env);
+    expect(deniedAsset.status).toBe(200);
+    expect(await deniedAsset.text()).toContain("EmMail Admin");
+    expect(env.ASSETS.fetch).not.toHaveBeenCalled();
+
+    const loginPage = await handleRequest(new Request("https://mail.example.com/login"), env);
+    expect(await loginPage.text()).toContain("EMMAIL_ADMIN_TOKEN is not configured");
+
+    // Public endpoints keep their own auth and stay reachable.
+    const ingest = await handleRequest(new Request("https://mail.example.com/api/integrations/southandozarks/contact-message", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-emmail-ingest-secret": "ingest_secret" },
+      body: JSON.stringify({ id: 1, name: "Ada Lovelace", email: "ada@example.com" })
+    }), env);
+    expect(ingest.status).toBe(200);
   });
 
   it("ingests South & Ozarks contact messages with list tags and idempotent events", async () => {
@@ -236,12 +305,13 @@ describe("Worker API", () => {
   it("seeds and clears sample data without removing real contacts", async () => {
     await handleRequest(new Request("https://mail.example.com/api/imports/commit", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...adminAuth },
       body: JSON.stringify({ csv: "email,name,lists,tags\nreal@example.com,Real Contact,Customers,real" })
     }), env);
 
     const seedResponse = await handleRequest(new Request("https://mail.example.com/api/sample-data/seed", {
-      method: "POST"
+      method: "POST",
+      headers: adminAuth
     }), env);
 
     expect(seedResponse.status).toBe(200);
@@ -268,19 +338,20 @@ describe("Worker API", () => {
       "taylor.quinn@example.com"
     ]);
 
-    const statusResponse = await handleRequest(new Request("https://mail.example.com/api/sample-data/status"), env);
+    const statusResponse = await handleRequest(new Request("https://mail.example.com/api/sample-data/status", { headers: adminAuth }), env);
     expect(statusResponse.status).toBe(200);
     await expect(statusResponse.json()).resolves.toMatchObject({ contacts: 8, campaigns: 2, events: 17 });
 
     const sampleEvents = await handleRequest(
-      new Request("https://mail.example.com/api/campaigns/sample_campaign_june/events"),
+      new Request("https://mail.example.com/api/campaigns/sample_campaign_june/events", { headers: adminAuth }),
       env
     );
     expect(sampleEvents.status).toBe(200);
     await expect(sampleEvents.json()).resolves.toHaveLength(17);
 
     const clearResponse = await handleRequest(new Request("https://mail.example.com/api/sample-data/clear", {
-      method: "POST"
+      method: "POST",
+      headers: adminAuth
     }), env);
 
     expect(clearResponse.status).toBe(200);
@@ -293,10 +364,10 @@ describe("Worker API", () => {
   });
 
   it("can seed sample data more than once without duplicating records", async () => {
-    await handleRequest(new Request("https://mail.example.com/api/sample-data/seed", { method: "POST" }), env);
-    await handleRequest(new Request("https://mail.example.com/api/sample-data/seed", { method: "POST" }), env);
+    await handleRequest(new Request("https://mail.example.com/api/sample-data/seed", { method: "POST", headers: adminAuth }), env);
+    await handleRequest(new Request("https://mail.example.com/api/sample-data/seed", { method: "POST", headers: adminAuth }), env);
 
-    const statusResponse = await handleRequest(new Request("https://mail.example.com/api/sample-data/status"), env);
+    const statusResponse = await handleRequest(new Request("https://mail.example.com/api/sample-data/status", { headers: adminAuth }), env);
 
     expect(statusResponse.status).toBe(200);
     await expect(statusResponse.json()).resolves.toMatchObject({
