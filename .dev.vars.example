@@ -1,0 +1,8 @@
+RESEND_API_KEY=re_local_dummy
+RESEND_WEBHOOK_SECRET=whsec_local_dummy
+TRACKING_SECRET=local_tracking_secret_change_me
+EMMAIL_INGEST_SECRET=local_ingest_secret_change_me
+APP_BASE_URL=http://localhost:8787
+DEFAULT_FROM_EMAIL=southandozarks@autojack.ai
+DEFAULT_FROM_NAME=EmMail
+EMMAIL_SEND_MODE=dry-run

@@ -1,0 +1,73 @@
+import type { Campaign, CampaignEvent, ContactRow, CsvPreview, SampleDataSummary } from "./types";
+
+async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(appPath(path), {
+    ...init,
+    headers: {
+      "content-type": "application/json",
+      ...init?.headers
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+export function listContacts(): Promise<ContactRow[]> {
+  return requestJson<ContactRow[]>("/api/contacts?limit=100&offset=0");
+}
+
+export async function previewImport(csv: string): Promise<CsvPreview> {
+  const response = await fetch(appPath("/api/imports/preview"), { method: "POST", body: csv });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  return response.json() as Promise<CsvPreview>;
+}
+
+export function commitImport(csv: string): Promise<CsvPreview> {
+  return requestJson<CsvPreview>("/api/imports/commit", {
+    method: "POST",
+    body: JSON.stringify({ csv })
+  });
+}
+
+export function listCampaigns(): Promise<Campaign[]> {
+  return requestJson<Campaign[]>("/api/campaigns");
+}
+
+export function createCampaign(input: {
+  name: string;
+  subject: string;
+  previewText: string;
+  markdownBody: string;
+  audience: { listIds: string[]; tagIds: string[] };
+}): Promise<Campaign> {
+  return requestJson<Campaign>("/api/campaigns", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function sendCampaign(campaignId: string): Promise<{ createdRecipients: number; skippedSuppressed: number; queuedJobs: number }> {
+  return requestJson(`/api/campaigns/${campaignId}/send`, { method: "POST" });
+}
+
+export function listEvents(campaignId: string): Promise<CampaignEvent[]> {
+  return requestJson<CampaignEvent[]>(`/api/campaigns/${campaignId}/events`);
+}
+
+export function seedSampleData(): Promise<SampleDataSummary> {
+  return requestJson<SampleDataSummary>("/api/sample-data/seed", { method: "POST" });
+}
+
+export function clearSampleData(): Promise<SampleDataSummary> {
+  return requestJson<SampleDataSummary>("/api/sample-data/clear", { method: "POST" });
+}
+
+function appPath(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
+  const base = new URL(".", window.location.href).pathname;
+  return `${base}${normalizedPath}`;
+}
