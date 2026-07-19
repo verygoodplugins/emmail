@@ -95,12 +95,12 @@ sent a one-shot welcome email. The ingest route enqueues a
 `{ type: "welcome", contactId }` message onto the same send queue (unless the
 contact already has a `welcome_sent` event); the consumer renders it through the
 campaign email shell and sends a single Resend email keyed `welcome/{contactId}`.
-Delivery is **at most once per contact** — the consumer re-checks `welcome_sent`
-and the Resend idempotency key dedupes, so duplicate messages are harmless. Only
-fresh (non-duplicate) ingests enqueue. The enqueue is best-effort and leaves no
-marker on failure, so it never fails lead capture and a later submission
-self-heals a dropped enqueue. Honors `EMMAIL_SEND_MODE` (dry-run records
-`welcome_sent` without calling Resend).
+Delivery is **at most once per contact** — the enqueue and consumer both gate on
+the `welcome_sent` event (not the ingest `duplicate` flag), and the Resend
+idempotency key dedupes, so duplicate messages are harmless. The enqueue is
+best-effort and leaves no marker on failure, so it never fails lead capture and a
+later submission — including a same-id replay — self-heals a dropped enqueue.
+Honors `EMMAIL_SEND_MODE` (dry-run records `welcome_sent` without calling Resend).
 
 Before sending, the consumer re-checks `isWelcomeEnabled` (so flipping the flag
 back to `false` is a true kill switch for already-queued messages) and the

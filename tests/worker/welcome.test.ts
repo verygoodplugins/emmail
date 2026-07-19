@@ -61,13 +61,6 @@ describe("Worker welcome wiring", () => {
     expect(env.SEND_QUEUE.send).toHaveBeenCalledTimes(1);
   });
 
-  it("does not enqueue for a duplicate ingest (same submission id)", async () => {
-    await ingest({ id: 1, name: "Ada Lovelace", email: "ada@example.com" });
-    // Replay of the same contact-message id → duplicate → no second welcome.
-    await ingest({ id: 1, name: "Ada Lovelace", email: "ada@example.com" });
-    expect(env.SEND_QUEUE.send).toHaveBeenCalledTimes(1);
-  });
-
   it("does not enqueue when the welcome flag is off", async () => {
     env.EMMAIL_WELCOME_ENABLED = "false";
     const response = await ingest({ id: 1, name: "Ada Lovelace", email: "ada@example.com" });
@@ -75,7 +68,7 @@ describe("Worker welcome wiring", () => {
     expect(env.SEND_QUEUE.send).not.toHaveBeenCalled();
   });
 
-  it("captures the lead and stays recoverable if welcome enqueue throws", async () => {
+  it("captures the lead and self-heals a dropped enqueue on a same-id replay", async () => {
     (env.SEND_QUEUE.send as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("queue down"));
     const response = await ingest({ id: 1, name: "Ada Lovelace", email: "ada@example.com" });
     expect(response.status).toBe(200);
@@ -83,9 +76,10 @@ describe("Worker welcome wiring", () => {
     const contact = await new ContactRepository(env.DB).getContactByEmail("ada@example.com");
     expect(contact).not.toBeNull();
 
-    // No welcome_sent marker persisted on the failed enqueue, so a later
-    // submission re-enqueues instead of silently dropping the welcome.
-    await ingest({ id: 2, name: "Ada Lovelace", email: "ada@example.com" });
+    // Replaying the SAME submission id (a duplicate ingest) must still re-enqueue,
+    // because no welcome_sent marker persisted — the gate is welcome_sent, not the
+    // ingest duplicate flag. welcome_sent still caps delivery at one per contact.
+    await ingest({ id: 1, name: "Ada Lovelace", email: "ada@example.com" });
     expect(env.SEND_QUEUE.send).toHaveBeenCalledTimes(2);
   });
 

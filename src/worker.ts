@@ -62,14 +62,14 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         return json({ error: "Unauthorized" }, 401);
       }
       const result = await ingestSouthOzarksContactMessage(env.DB, await request.json());
-      // Only fresh submissions trigger a welcome (preserve ingest idempotency);
-      // best-effort so a welcome-enqueue failure never loses the captured lead.
-      if (!result.duplicate) {
-        try {
-          await maybeEnqueueWelcome(env, result.contact.id);
-        } catch (error) {
-          console.error("Welcome enqueue failed", error);
-        }
+      // Gate the welcome on welcome_sent (inside maybeEnqueueWelcome), NOT on the
+      // ingest `duplicate` flag: a duplicate replay is exactly how a dropped
+      // enqueue self-heals, and welcome_sent already caps delivery at one per
+      // contact. Best-effort so a queue failure never loses the captured lead.
+      try {
+        await maybeEnqueueWelcome(env, result.contact.id);
+      } catch (error) {
+        console.error("Welcome enqueue failed", error);
       }
       return json({ ok: true, ...result });
     }

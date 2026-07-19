@@ -213,6 +213,17 @@ describe("welcome automation", () => {
       expect(await campaigns.hasContactEvent(contactId, ["welcome_sent"])).toBe(false);
     });
 
+    it("rethrows an application_error (Resend 500) so the queue redelivers", async () => {
+      const contactId = await createContact();
+      const adapter: ResendEmailAdapter = {
+        sendEmail: vi.fn(async () => ({ data: null, error: { name: "application_error", message: "try again" } }))
+      };
+
+      await expect(processWelcomeSend(env, { type: "welcome", contactId }, adapter)).rejects.toThrow("try again");
+      const campaigns = new CampaignRepository(env.DB);
+      expect(await campaigns.hasContactEvent(contactId, ["welcome_sent"])).toBe(false);
+    });
+
     it("acks a terminal Resend error by recording welcome_failed (no retry storm)", async () => {
       const contactId = await createContact();
       const adapter: ResendEmailAdapter = {

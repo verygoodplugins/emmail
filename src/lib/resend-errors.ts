@@ -11,6 +11,7 @@ export function isRetryableResendError(error: unknown): boolean {
   return (
     name === "rate_limit_exceeded" ||
     name === "internal_server_error" ||
+    name === "application_error" ||
     name === "concurrent_idempotent_requests"
   );
 }
