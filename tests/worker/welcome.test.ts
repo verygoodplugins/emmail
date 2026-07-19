@@ -61,6 +61,13 @@ describe("Worker welcome wiring", () => {
     expect(env.SEND_QUEUE.send).toHaveBeenCalledTimes(1);
   });
 
+  it("does not enqueue for a duplicate ingest (same submission id)", async () => {
+    await ingest({ id: 1, name: "Ada Lovelace", email: "ada@example.com" });
+    // Replay of the same contact-message id → duplicate → no second welcome.
+    await ingest({ id: 1, name: "Ada Lovelace", email: "ada@example.com" });
+    expect(env.SEND_QUEUE.send).toHaveBeenCalledTimes(1);
+  });
+
   it("does not enqueue when the welcome flag is off", async () => {
     env.EMMAIL_WELCOME_ENABLED = "false";
     const response = await ingest({ id: 1, name: "Ada Lovelace", email: "ada@example.com" });
@@ -96,6 +103,24 @@ describe("Worker welcome wiring", () => {
 
       const response = await handleRequest(
         new Request(`https://mail.example.com/unsubscribe/c/${contactId}/${token}`),
+        env
+      );
+
+      expect(response.status).toBe(200);
+      const contact = await new ContactRepository(env.DB).getContactById(contactId);
+      expect(contact?.status).toBe("unsubscribed");
+    });
+
+    it("accepts a one-click POST unsubscribe (RFC 8058)", async () => {
+      const contactId = await seedContact("oneclick@example.com");
+      const token = await signToken(env.TRACKING_SECRET, "unsubscribe-contact", [contactId]);
+
+      const response = await handleRequest(
+        new Request(`https://mail.example.com/unsubscribe/c/${contactId}/${token}`, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: "List-Unsubscribe=One-Click"
+        }),
         env
       );
 

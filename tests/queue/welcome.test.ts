@@ -167,6 +167,34 @@ describe("welcome automation", () => {
       expect(sendEmail).not.toHaveBeenCalled();
     });
 
+    it("skips when the flag was disabled after the message was queued (kill switch)", async () => {
+      const contactId = await createContact();
+      env.EMMAIL_WELCOME_ENABLED = "false";
+      const { adapter, sendEmail } = successAdapter();
+
+      const result = await processWelcomeSend(env, { type: "welcome", contactId }, adapter);
+
+      expect(result).toMatchObject({ status: "skipped", reason: "welcome-disabled" });
+      expect(sendEmail).not.toHaveBeenCalled();
+    });
+
+    it("skips a suppressed contact even if ingest re-marked it subscribed", async () => {
+      const contactId = await createContact({ email: "optout@example.com" });
+      const contacts = new ContactRepository(env.DB);
+      // Opt out (adds a suppression row + flips status), then simulate a later
+      // contact-form ingest re-upserting the same email as subscribed.
+      await contacts.suppressEmail("optout@example.com", "unsubscribe", "prior-optout");
+      await contacts.importContacts([{ email: "optout@example.com", firstName: "Dana", lastName: "Lead", status: "subscribed", lists: [], tags: [] }]);
+      const refreshed = await contacts.getContactById(contactId);
+      expect(refreshed?.status).toBe("subscribed");
+      const { adapter, sendEmail } = successAdapter();
+
+      const result = await processWelcomeSend(env, { type: "welcome", contactId }, adapter);
+
+      expect(result).toMatchObject({ status: "skipped", reason: "suppressed" });
+      expect(sendEmail).not.toHaveBeenCalled();
+    });
+
     it("skips a vanished contact as a terminal no-op", async () => {
       const { adapter, sendEmail } = successAdapter();
       const result = await processWelcomeSend(env, { type: "welcome", contactId: "con_missing" }, adapter);

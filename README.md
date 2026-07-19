@@ -96,10 +96,18 @@ sent a one-shot welcome email. The ingest route enqueues a
 contact already has a `welcome_sent` event); the consumer renders it through the
 campaign email shell and sends a single Resend email keyed `welcome/{contactId}`.
 Delivery is **at most once per contact** — the consumer re-checks `welcome_sent`
-and the Resend idempotency key dedupes, so duplicate messages are harmless. The
-enqueue is best-effort and leaves no marker on failure, so it never fails lead
-capture and a later submission self-heals a dropped enqueue. Honors
-`EMMAIL_SEND_MODE` (dry-run records `welcome_sent` without calling Resend).
+and the Resend idempotency key dedupes, so duplicate messages are harmless. Only
+fresh (non-duplicate) ingests enqueue. The enqueue is best-effort and leaves no
+marker on failure, so it never fails lead capture and a later submission
+self-heals a dropped enqueue. Honors `EMMAIL_SEND_MODE` (dry-run records
+`welcome_sent` without calling Resend).
+
+Before sending, the consumer re-checks `isWelcomeEnabled` (so flipping the flag
+back to `false` is a true kill switch for already-queued messages) and the
+`suppressions` table (ingest re-subscribes on re-submit, so `status` alone can
+be stale). Welcome bounces/complaints resolve back to the contact via the
+`welcome_sent` provider id and suppress them; the one-click unsubscribe route
+accepts both `GET` and RFC 8058 `POST`.
 
 The flag defaults **off** in `wrangler.toml`; arming it (and `EMMAIL_SEND_MODE =
 "live"`) is what makes real welcomes send. Edit the copy in

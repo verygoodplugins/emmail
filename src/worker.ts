@@ -62,11 +62,14 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         return json({ error: "Unauthorized" }, 401);
       }
       const result = await ingestSouthOzarksContactMessage(env.DB, await request.json());
-      // Best-effort: a welcome-enqueue failure must never lose the captured lead.
-      try {
-        await maybeEnqueueWelcome(env, result.contact.id);
-      } catch (error) {
-        console.error("Welcome enqueue failed", error);
+      // Only fresh submissions trigger a welcome (preserve ingest idempotency);
+      // best-effort so a welcome-enqueue failure never loses the captured lead.
+      if (!result.duplicate) {
+        try {
+          await maybeEnqueueWelcome(env, result.contact.id);
+        } catch (error) {
+          console.error("Welcome enqueue failed", error);
+        }
       }
       return json({ ok: true, ...result });
     }
@@ -167,7 +170,9 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
 
     const contactUnsubscribeMatch = path.match(/^\/unsubscribe\/c\/([^/]+)\/([^/]+)$/);
-    if (request.method === "GET" && contactUnsubscribeMatch) {
+    if ((request.method === "GET" || request.method === "POST") && contactUnsubscribeMatch) {
+      // POST supports RFC 8058 one-click unsubscribe (the List-Unsubscribe-Post
+      // header advertised on welcome mail); GET supports a human clicking it.
       return handleContactUnsubscribe(env, contactUnsubscribeMatch[1], contactUnsubscribeMatch[2]);
     }
 

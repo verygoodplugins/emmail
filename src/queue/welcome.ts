@@ -64,6 +64,13 @@ export async function processWelcomeSend(
   resend: ResendEmailAdapter
 ): Promise<WelcomeSendResult> {
   const { contactId } = message;
+
+  // Kill switch: a message already on the queue must not send if the automation
+  // was disabled after it was enqueued, so the flag is a real rollback.
+  if (!isWelcomeEnabled(env)) {
+    return { status: "skipped", contactId, reason: "welcome-disabled" };
+  }
+
   const campaigns = new CampaignRepository(env.DB);
   const contacts = new ContactRepository(env.DB);
 
@@ -71,11 +78,15 @@ export async function processWelcomeSend(
   if (!contact) {
     return { status: "skipped", contactId, reason: "contact-not-found" };
   }
-  // status already reflects suppression: suppressEmail() sets unsubscribed /
-  // bounced for unsubscribe / bounce / complaint.
   if (contact.status !== "subscribed") {
     await campaigns.recordEvent({ contactId, type: "welcome_skipped", metadata: { reason: `status:${contact.status}` } });
     return { status: "skipped", contactId, reason: `status:${contact.status}` };
+  }
+  // status can be stale (ingest re-subscribes on re-submit), so also consult the
+  // suppressions table before mailing — an opted-out address must not get this.
+  if (await contacts.isSuppressed(contact.email)) {
+    await campaigns.recordEvent({ contactId, type: "welcome_skipped", metadata: { reason: "suppressed" } });
+    return { status: "skipped", contactId, reason: "suppressed" };
   }
   // Redelivery after a successful send.
   if (await campaigns.hasContactEvent(contactId, ["welcome_sent"])) {

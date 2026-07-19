@@ -43,4 +43,26 @@ describe("Resend webhook handler", () => {
     expect(await db.prepare("SELECT type FROM suppressions WHERE email = ?").bind("ada@example.com").first("type")).toBe("bounce");
     expect(await db.prepare("SELECT type FROM events WHERE recipient_id = ? AND type = 'bounced'").bind(recipient.id).first("type")).toBe("bounced");
   });
+
+  it("suppresses a welcome-email contact on bounce via its welcome_sent event", async () => {
+    const contacts = new ContactRepository(db);
+    const campaigns = new CampaignRepository(db);
+    await contacts.importContacts([
+      { email: "wel@example.com", firstName: "Wel", lastName: "Come", status: "subscribed", lists: [], tags: [] }
+    ]);
+    const contact = await contacts.getContactByEmail("wel@example.com");
+    // A live welcome send records its Resend id on a welcome_sent event (no recipient row).
+    await campaigns.recordEvent({ contactId: contact!.id, type: "welcome_sent", providerEventId: "email_welcome_9", metadata: { mode: "live" } });
+
+    const payload = JSON.stringify({
+      type: "email.bounced",
+      data: { email_id: "email_welcome_9", to: ["wel@example.com"] }
+    });
+    const verify = vi.fn(() => JSON.parse(payload));
+
+    await handleVerifiedResendWebhook(db, payload, new Headers({ "svix-id": "msg_2" }), "secret", verify);
+
+    expect(await db.prepare("SELECT type FROM suppressions WHERE email = ?").bind("wel@example.com").first("type")).toBe("bounce");
+    expect(await db.prepare("SELECT type FROM events WHERE contact_id = ? AND type = 'welcome_bounced'").bind(contact!.id).first("type")).toBe("welcome_bounced");
+  });
 });
