@@ -57,6 +57,10 @@ export class ContactRepository {
     return await this.db.prepare("SELECT * FROM contacts WHERE email = ?").bind(email.toLowerCase()).first<ContactRow>();
   }
 
+  async getContactById(id: string): Promise<ContactRow | null> {
+    return await this.db.prepare("SELECT * FROM contacts WHERE id = ?").bind(id).first<ContactRow>();
+  }
+
   private async upsertContact(contact: ImportedContact): Promise<void> {
     const now = nowIso();
     const existing = await this.getContactByEmail(contact.email);

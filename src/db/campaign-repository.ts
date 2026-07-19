@@ -297,6 +297,19 @@ export class CampaignRepository {
     ).run();
   }
 
+  // True when the contact already has any event of the given types — used to
+  // gate the once-per-contact welcome email (welcome_queued / welcome_sent).
+  async hasContactEvent(contactId: string, types: string[]): Promise<boolean> {
+    if (types.length === 0) {
+      return false;
+    }
+    const placeholders = types.map(() => "?").join(", ");
+    const row = await this.db.prepare(
+      `SELECT id FROM events WHERE contact_id = ? AND type IN (${placeholders}) LIMIT 1`
+    ).bind(contactId, ...types).first<{ id: string }>();
+    return Boolean(row);
+  }
+
   async ensureLinks(campaignId: string, urls: string[]): Promise<Array<{ id: string; url: string; position: number }>> {
     const now = nowIso();
     for (let position = 0; position < urls.length; position += 1) {

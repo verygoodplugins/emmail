@@ -88,6 +88,25 @@ a lost queue message), and is a no-op once the campaign has fully drained.
 (`total/sent/delivered/opened/clicked/pending/failed`); `pending` is the live
 send progress.
 
+## Welcome automation
+
+When `EMMAIL_WELCOME_ENABLED = "true"`, a freshly ingested contact-form lead is
+sent a one-shot welcome email. The ingest route enqueues a
+`{ type: "welcome", contactId }` message onto the same send queue (unless the
+contact already has a `welcome_sent` event); the consumer renders it through the
+campaign email shell and sends a single Resend email keyed `welcome/{contactId}`.
+Delivery is **at most once per contact** — the consumer re-checks `welcome_sent`
+and the Resend idempotency key dedupes, so duplicate messages are harmless. The
+enqueue is best-effort and leaves no marker on failure, so it never fails lead
+capture and a later submission self-heals a dropped enqueue. Honors
+`EMMAIL_SEND_MODE` (dry-run records `welcome_sent` without calling Resend).
+
+The flag defaults **off** in `wrangler.toml`; arming it (and `EMMAIL_SEND_MODE =
+"live"`) is what makes real welcomes send. Edit the copy in
+[`src/email/welcome.ts`](src/email/welcome.ts) — subject, preview, and the
+Markdown body. The contact name comes from the public form and is sanitized
+before it reaches the renderer.
+
 ## Admin
 
 The preferred production setup is Cloudflare Access protecting the admin route. The current `workers.dev` fallback uses `EMMAIL_ADMIN_TOKEN` as a Worker-level admin gate; if the token is unset, admin access is denied entirely (fail closed), so set the secret before deploying.
@@ -116,8 +135,11 @@ Admin surfaces:
 - `GET /t/open/:recipientId/:campaignId/:token.gif`
 - `GET /t/click/:recipientId/:linkId/:token`
 - `GET /unsubscribe/:recipientId/:token`
+- `GET /unsubscribe/c/:contactId/:token` (contact-scoped, for transactional mail)
 - `POST /webhooks/resend`
 
 ## Deferred
 
-Automations, saved segments, visual flow builder, forms, landing pages, custom-field import, R2 storage, and multi-tenancy are intentionally out of milestone 1.
+The ingest-triggered welcome (above) is the one shipped automation. A general
+automation/flow builder, saved segments, forms, landing pages, custom-field
+import, R2 storage, and multi-tenancy remain out of scope for now.

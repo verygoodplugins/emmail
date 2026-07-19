@@ -1,4 +1,4 @@
-import type { CampaignSendMessage, Env } from "./env";
+import type { Env, SendQueueMessage } from "./env";
 import { Resend } from "resend";
 import { CampaignRepository } from "./db/campaign-repository";
 import { ContactRepository } from "./db/contact-repository";
@@ -9,6 +9,7 @@ import { previewContactsCsv } from "./lib/csv";
 import { createId, nowIso } from "./lib/ids";
 import { verifyToken } from "./lib/tokens";
 import { processCampaignSend } from "./queue/send";
+import { maybeEnqueueWelcome, processWelcomeSend } from "./queue/welcome";
 import { handleVerifiedResendWebhook } from "./webhooks/resend";
 
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
@@ -61,6 +62,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         return json({ error: "Unauthorized" }, 401);
       }
       const result = await ingestSouthOzarksContactMessage(env.DB, await request.json());
+      // Best-effort: a welcome-enqueue failure must never lose the captured lead.
+      try {
+        await maybeEnqueueWelcome(env, result.contact.id);
+      } catch (error) {
+        console.error("Welcome enqueue failed", error);
+      }
       return json({ ok: true, ...result });
     }
 
@@ -159,6 +166,11 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return handleClick(env, clickMatch[1], clickMatch[2], clickMatch[3]);
     }
 
+    const contactUnsubscribeMatch = path.match(/^\/unsubscribe\/c\/([^/]+)\/([^/]+)$/);
+    if (request.method === "GET" && contactUnsubscribeMatch) {
+      return handleContactUnsubscribe(env, contactUnsubscribeMatch[1], contactUnsubscribeMatch[2]);
+    }
+
     const unsubscribeMatch = path.match(/^\/unsubscribe\/([^/]+)\/([^/]+)$/);
     if (request.method === "GET" && unsubscribeMatch) {
       return handleUnsubscribe(env, unsubscribeMatch[1], unsubscribeMatch[2]);
@@ -180,19 +192,29 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
 export default {
   fetch: handleRequest,
-  async queue(batch: MessageBatch<CampaignSendMessage>, env: Env): Promise<void> {
+  async queue(batch: MessageBatch<SendQueueMessage>, env: Env): Promise<void> {
     const resend = new Resend(env.RESEND_API_KEY);
     for (const message of batch.messages) {
+      const body = message.body;
       try {
-        await processCampaignSend(env, message.body, {
-          sendBatch: async (messages, options) => {
-            const response = await resend.batch.send(messages, { idempotencyKey: options.idempotencyKey });
-            return { data: response.data?.data ?? null, error: response.error };
-          }
-        });
+        if (body.type === "welcome") {
+          await processWelcomeSend(env, body, {
+            sendEmail: async (payload, options) => {
+              const response = await resend.emails.send(payload, { idempotencyKey: options.idempotencyKey });
+              return { data: response.data, error: response.error };
+            }
+          });
+        } else {
+          await processCampaignSend(env, body, {
+            sendBatch: async (messages, options) => {
+              const response = await resend.batch.send(messages, { idempotencyKey: options.idempotencyKey });
+              return { data: response.data?.data ?? null, error: response.error };
+            }
+          });
+        }
         message.ack();
       } catch (error) {
-        console.error("Campaign send message failed", error);
+        console.error("Send message failed", error);
         message.retry();
       }
     }
@@ -222,6 +244,7 @@ function isPublicPath(method: string, path: string): boolean {
     (method === "POST" && path === "/webhooks/resend") ||
     /^\/t\/open\/[^/]+\/[^/]+\/[^/]+\.gif$/.test(path) ||
     /^\/t\/click\/[^/]+\/[^/]+\/[^/]+$/.test(path) ||
+    /^\/unsubscribe\/c\/[^/]+\/[^/]+$/.test(path) ||
     /^\/unsubscribe\/[^/]+\/[^/]+$/.test(path)
   );
 }
@@ -407,6 +430,28 @@ async function handleUnsubscribe(env: Env, recipientId: string, token: string): 
   }
   await new ContactRepository(env.DB).suppressEmail(recipient.email, "unsubscribe", "one-click");
   await campaigns.recordEvent({ recipientId, type: "unsubscribe" });
+  return unsubscribedPage();
+}
+
+// Contact-scoped unsubscribe for transactional mail (e.g. the welcome email)
+// that has no campaign_recipients row. Token purpose is distinct from the
+// recipient unsubscribe so the two can never be cross-replayed.
+async function handleContactUnsubscribe(env: Env, contactId: string, token: string): Promise<Response> {
+  const ok = await verifyToken(env.TRACKING_SECRET, "unsubscribe-contact", [contactId], token);
+  if (!ok) {
+    return new Response(null, { status: 404 });
+  }
+  const contacts = new ContactRepository(env.DB);
+  const contact = await contacts.getContactById(contactId);
+  if (!contact) {
+    return new Response(null, { status: 404 });
+  }
+  await contacts.suppressEmail(contact.email, "unsubscribe", "one-click");
+  await new CampaignRepository(env.DB).recordEvent({ contactId, type: "unsubscribe" });
+  return unsubscribedPage();
+}
+
+function unsubscribedPage(): Response {
   return new Response("<!doctype html><title>Unsubscribed</title><p>You have been unsubscribed.</p>", {
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
   });
