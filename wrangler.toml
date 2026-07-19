@@ -13,7 +13,7 @@ run_worker_first = true
 APP_BASE_URL = "https://emmail-southandozarks.very-good-plugins.workers.dev"
 DEFAULT_FROM_EMAIL = "southandozarks@autojack.ai"
 DEFAULT_FROM_NAME = "EmMail"
-EMMAIL_SEND_MODE = "dry-run"
+EMMAIL_SEND_MODE = "live"
 
 # Preferred route once the Cloudflare token has Zone Workers Routes permission:
 # [[routes]]
