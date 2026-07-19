@@ -102,6 +102,13 @@ best-effort and leaves no marker on failure, so it never fails lead capture and 
 later submission — including a same-id replay — self-heals a dropped enqueue.
 Honors `EMMAIL_SEND_MODE` (dry-run records `welcome_sent` without calling Resend).
 
+The one boundary on the at-most-once guarantee: the `welcome/{contactId}`
+idempotency key only dedupes within Resend's 24h window. If the post-send
+`welcome_sent` write fails across every queue retry (a sustained D1 outage) *and*
+the same contact re-submits after that window, a second welcome can go out —
+bounded to one extra email for a re-engaging lead. Closing that sub-window would
+need a transactional outbox capturing the provider id atomically at send time.
+
 Before sending, the consumer re-checks `isWelcomeEnabled` (so flipping the flag
 back to `false` is a true kill switch for already-queued messages) and the
 `suppressions` table (ingest re-subscribes on re-submit, so `status` alone can
