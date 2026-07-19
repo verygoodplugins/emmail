@@ -14,6 +14,9 @@ APP_BASE_URL = "https://emmail-southandozarks.very-good-plugins.workers.dev"
 DEFAULT_FROM_EMAIL = "southandozarks@autojack.ai"
 DEFAULT_FROM_NAME = "EmMail"
 EMMAIL_SEND_MODE = "live"
+# Ingest-triggered welcome email. Default off: flip to "true" to arm it (an
+# armed welcome still only sends for real when EMMAIL_SEND_MODE = "live").
+EMMAIL_WELCOME_ENABLED = "false"
 
 # Preferred route once the Cloudflare token has Zone Workers Routes permission:
 # [[routes]]

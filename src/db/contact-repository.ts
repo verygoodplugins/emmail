@@ -57,6 +57,20 @@ export class ContactRepository {
     return await this.db.prepare("SELECT * FROM contacts WHERE email = ?").bind(email.toLowerCase()).first<ContactRow>();
   }
 
+  async getContactById(id: string): Promise<ContactRow | null> {
+    return await this.db.prepare("SELECT * FROM contacts WHERE id = ?").bind(id).first<ContactRow>();
+  }
+
+  // Targeted single-email suppression check (not the whole table). `status`
+  // alone is not enough: contact-form ingest re-upserts an existing email as
+  // `subscribed`, so a previously unsubscribed/bounced address can look
+  // subscribed again while its suppression row persists.
+  async isSuppressed(email: string): Promise<boolean> {
+    const row = await this.db.prepare("SELECT 1 AS hit FROM suppressions WHERE email = ? LIMIT 1")
+      .bind(email.toLowerCase()).first<{ hit: number }>();
+    return Boolean(row);
+  }
+
   private async upsertContact(contact: ImportedContact): Promise<void> {
     const now = nowIso();
     const existing = await this.getContactByEmail(contact.email);

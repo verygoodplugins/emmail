@@ -2,6 +2,7 @@ import type { CampaignSendMessage, Env } from "../env";
 import { CampaignRepository, type SendOutcome } from "../db/campaign-repository";
 import { renderCampaignEmail } from "../email/render";
 import { formatFromHeader } from "../lib/email";
+import { isRetryableResendError, stringifyResendError } from "../lib/resend-errors";
 import { signToken } from "../lib/tokens";
 import { appendOpenPixel, extractLinks, rewriteLinksForRecipient } from "../lib/tracking";
 
@@ -94,9 +95,9 @@ export async function processCampaignSend(
     });
     if (result.error || !result.data) {
       if (isRetryableResendError(result.error)) {
-        throw new Error(`Retryable Resend batch error: ${stringifyError(result.error)}`);
+        throw new Error(`Retryable Resend batch error: ${stringifyResendError(result.error)}`);
       }
-      const error = stringifyError(result.error);
+      const error = stringifyResendError(result.error);
       outcomes = recipients.map((recipient) => ({ recipient, status: "failed" as const, error }));
     } else {
       const data = result.data;
@@ -128,33 +129,6 @@ export async function processCampaignSend(
     batchIndex,
     requeued
   };
-}
-
-// Errors that a redelivery can plausibly clear; anything else is marked as a
-// final per-recipient failure so the batch chain keeps advancing.
-function isRetryableResendError(error: unknown): boolean {
-  if (!error || typeof error !== "object" || !("name" in error)) {
-    return false;
-  }
-  const name = (error as { name?: unknown }).name;
-  return (
-    name === "rate_limit_exceeded" ||
-    name === "internal_server_error" ||
-    name === "concurrent_idempotent_requests"
-  );
-}
-
-function stringifyError(error: unknown): string {
-  if (!error) {
-    return "Unknown Resend batch error";
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "object" && "message" in error && typeof error.message === "string") {
-    return error.message;
-  }
-  return JSON.stringify(error);
 }
 
 function trimSlash(value: string): string {

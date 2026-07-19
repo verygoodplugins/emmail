@@ -297,6 +297,32 @@ export class CampaignRepository {
     ).run();
   }
 
+  // Resolve a welcome send back to its contact by the Resend provider id stored
+  // on the welcome_sent event. Welcome emails have no campaign_recipients row,
+  // so bounce/complaint webhooks use this to find who to suppress.
+  async findWelcomeContactByProviderId(providerId: string): Promise<{ contactId: string; email: string } | null> {
+    const row = await this.db.prepare(
+      `SELECT c.id AS contactId, c.email AS email
+       FROM events e JOIN contacts c ON c.id = e.contact_id
+       WHERE e.type = 'welcome_sent' AND e.provider_event_id = ?
+       LIMIT 1`
+    ).bind(providerId).first<{ contactId: string; email: string }>();
+    return row ?? null;
+  }
+
+  // True when the contact already has any event of the given types — used to
+  // gate the once-per-contact welcome email (welcome_sent).
+  async hasContactEvent(contactId: string, types: string[]): Promise<boolean> {
+    if (types.length === 0) {
+      return false;
+    }
+    const placeholders = types.map(() => "?").join(", ");
+    const row = await this.db.prepare(
+      `SELECT id FROM events WHERE contact_id = ? AND type IN (${placeholders}) LIMIT 1`
+    ).bind(contactId, ...types).first<{ id: string }>();
+    return Boolean(row);
+  }
+
   async ensureLinks(campaignId: string, urls: string[]): Promise<Array<{ id: string; url: string; position: number }>> {
     const now = nowIso();
     for (let position = 0; position < urls.length; position += 1) {
