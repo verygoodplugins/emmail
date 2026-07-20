@@ -30,4 +30,10 @@ export interface WelcomeSendMessage {
   contactId: string;
 }
 
-export type SendQueueMessage = CampaignSendMessage | WelcomeSendMessage;
+// Advance (or resume after a wait) a multi-step automation enrollment.
+export interface AutomationSendMessage {
+  type: "automation";
+  enrollmentId: string;
+}
+
+export type SendQueueMessage = CampaignSendMessage | WelcomeSendMessage | AutomationSendMessage;

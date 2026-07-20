@@ -297,14 +297,15 @@ export class CampaignRepository {
     ).run();
   }
 
-  // Resolve a welcome send back to its contact by the Resend provider id stored
-  // on the welcome_sent event. Welcome emails have no campaign_recipients row,
-  // so bounce/complaint webhooks use this to find who to suppress.
+  // Resolve a transactional send (welcome or automation email) back to its
+  // contact by the Resend provider id stored on the send event. These emails
+  // have no campaign_recipients row, so bounce/complaint webhooks use this to
+  // find who to suppress.
   async findWelcomeContactByProviderId(providerId: string): Promise<{ contactId: string; email: string } | null> {
     const row = await this.db.prepare(
       `SELECT c.id AS contactId, c.email AS email
        FROM events e JOIN contacts c ON c.id = e.contact_id
-       WHERE e.type = 'welcome_sent' AND e.provider_event_id = ?
+       WHERE e.type IN ('welcome_sent', 'automation_email_sent') AND e.provider_event_id = ?
        LIMIT 1`
     ).bind(providerId).first<{ contactId: string; email: string }>();
     return row ?? null;
