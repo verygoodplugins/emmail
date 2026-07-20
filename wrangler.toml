@@ -45,6 +45,11 @@ max_batch_timeout = 30
 max_concurrency = 1
 max_retries = 3
 
+# Wake multi-step automations whose waits exceed the queue delay cap (12h),
+# and self-heal enrollments whose immediate queue message was lost.
+[triggers]
+crons = ["* * * * *"]
+
 [observability]
 enabled = true
 head_sampling_rate = 1

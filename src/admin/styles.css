@@ -183,6 +183,35 @@ th {
   font-weight: 700;
 }
 
+.automation-row {
+  align-items: flex-start;
+}
+
+.automation-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.automation-row > div span {
+  color: #687078;
+  font-size: 13px;
+}
+
+.step-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #4f5961;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.status.enabled {
+  background: #e9f7f5;
+  color: #0f766e;
+}
+
 .danger {
   color: #9a3412;
   border-color: #fed7aa;

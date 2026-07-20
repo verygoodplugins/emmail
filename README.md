@@ -153,8 +153,48 @@ Admin surfaces:
 - `GET /unsubscribe/c/:contactId/:token` (contact-scoped, for transactional mail)
 - `POST /webhooks/resend`
 
+## Multi-step automations
+
+EmMail now has a small ActiveCampaign-style sequence engine on the same Worker +
+D1 + Queue stack (no extra services):
+
+| Piece | Role |
+|---|---|
+| `automations` / `automation_steps` / `automation_enrollments` | Schema (migration `0004`) |
+| Trigger `contact_created` | Enroll on South & Ozarks contact-form ingest |
+| Steps | `send_email`, `wait` (seconds), `add_tag` |
+| Queue message `{ type: "automation", enrollmentId }` | Drain one enrollment until a wait or completion |
+| Cron `* * * * *` | Re-queue due waits (>12h or lost delay) and stuck actives |
+
+### Demo: welcome sequence
+
+1. Apply migrations (`npm run db:migrate:local` / remote).
+2. In admin → **Automations** → **Seed welcome sequence** (or
+   `POST /api/automations/seed-welcome`).
+3. **Enable** the sequence (disabled by default — kill switch).
+4. Submit a contact form (or hit the ingest endpoint). The contact gets:
+   - welcome email now
+   - 2-minute wait (local demo default)
+   - follow-up email
+   - tag `welcome-sequence-complete`
+
+Copy lives in [`src/email/welcome.ts`](src/email/welcome.ts) (welcome + follow-up).
+Bodies support `{{first_name}}`. Sends honor `EMMAIL_SEND_MODE`, suppression, and
+contact-scoped one-click unsubscribe. Provider ids are stored as
+`automation_email_sent` events so Resend bounce/complaint webhooks still suppress.
+
+**Do not arm both** `EMMAIL_WELCOME_ENABLED=true` and an enabled `contact_created`
+automation for the same stream — that double-emails new leads. Prefer the
+multi-step sequence and leave the one-shot welcome flag off.
+
+### Admin/API
+
+- `GET /api/automations`
+- `POST /api/automations/seed-welcome`
+- `POST /api/automations/:id/enable` / `.../disable`
+- `GET /api/automations/:id/enrollments`
+
 ## Deferred
 
-The ingest-triggered welcome (above) is the one shipped automation. A general
-automation/flow builder, saved segments, forms, landing pages, custom-field
+A full visual flow builder, saved segments, forms, landing pages, custom-field
 import, R2 storage, and multi-tenancy remain out of scope for now.
