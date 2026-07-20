@@ -124,6 +124,12 @@ export async function processAutomationEnrollment(
 
     const step = await automations.getStepAt(current.automationId, current.currentPosition);
     if (!step) {
+      // Concurrent wakes can both reach "no more steps"; only the first transition
+      // to completed should emit automation_completed.
+      const beforeComplete = await automations.getEnrollment(current.id);
+      if (beforeComplete?.status === "completed") {
+        return { status: "completed", enrollmentId: current.id, stepsRun };
+      }
       await automations.updateEnrollment(current.id, { status: "completed", nextRunAt: null, lastError: null });
       await campaigns.recordEvent({
         contactId: contact.id,
