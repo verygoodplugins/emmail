@@ -11,7 +11,9 @@ import {
   RefreshCw,
   Send,
   Trash2,
-  Upload
+  Upload,
+  Workflow,
+  Zap
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -19,16 +21,19 @@ import {
   commitImport,
   createCampaign,
   getCampaignStats,
+  listAutomations,
   listCampaigns,
   listContacts,
   listEvents,
   previewImport,
   seedSampleData,
-  sendCampaign
+  seedWelcomeAutomation,
+  sendCampaign,
+  setAutomationEnabled
 } from "./api";
-import type { Campaign, CampaignEvent, CampaignStats, ContactRow, CsvPreview } from "./types";
+import type { AutomationSummary, Campaign, CampaignEvent, CampaignStats, ContactRow, CsvPreview } from "./types";
 
-type Tab = "contacts" | "imports" | "campaigns" | "events";
+type Tab = "contacts" | "imports" | "campaigns" | "automations" | "events";
 
 const seedCsv = "email,name,lists,tags\nada@example.com,Ada Lovelace,Newsletter,vip";
 
@@ -36,6 +41,7 @@ export function App() {
   const [tab, setTab] = useState<Tab>("contacts");
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [automations, setAutomations] = useState<AutomationSummary[]>([]);
   const [events, setEvents] = useState<CampaignEvent[]>([]);
   const [stats, setStats] = useState<CampaignStats | null>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState("");
@@ -56,6 +62,7 @@ export function App() {
     void refresh().catch(() => {
       setContacts([]);
       setCampaigns([]);
+      setAutomations([]);
     });
   }, []);
 
@@ -69,9 +76,14 @@ export function App() {
   const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId) ?? campaigns[0];
 
   async function refresh() {
-    const [contactRows, campaignRows] = await Promise.all([listContacts(), listCampaigns()]);
+    const [contactRows, campaignRows, automationRows] = await Promise.all([
+      listContacts(),
+      listCampaigns(),
+      listAutomations().catch(() => [] as AutomationSummary[])
+    ]);
     setContacts(contactRows);
     setCampaigns(campaignRows);
+    setAutomations(automationRows);
     const nextCampaignId = selectedCampaignId && campaignRows.some((campaign) => campaign.id === selectedCampaignId)
       ? selectedCampaignId
       : campaignRows[0]?.id ?? "";
@@ -163,6 +175,31 @@ export function App() {
     }
   }
 
+  async function runSeedWelcomeAutomation() {
+    setBusy(true);
+    setNotice("");
+    try {
+      const automation = await seedWelcomeAutomation();
+      setNotice(`Seeded “${automation.name}” (${automation.steps.length} steps)`);
+      await refresh();
+      setTab("automations");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runToggleAutomation(id: string, enabled: boolean) {
+    setBusy(true);
+    setNotice("");
+    try {
+      const automation = await setAutomationEnabled(id, enabled);
+      setNotice(`${automation.name} ${enabled ? "enabled" : "disabled"}`);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -174,6 +211,7 @@ export function App() {
           <NavButton active={tab === "contacts"} icon={<ContactRound size={17} />} label="Contacts" onClick={() => setTab("contacts")} />
           <NavButton active={tab === "imports"} icon={<FileUp size={17} />} label="Imports" onClick={() => setTab("imports")} />
           <NavButton active={tab === "campaigns"} icon={<MailPlus size={17} />} label="Campaigns" onClick={() => setTab("campaigns")} />
+          <NavButton active={tab === "automations"} icon={<Workflow size={17} />} label="Automations" onClick={() => setTab("automations")} />
           <NavButton active={tab === "events"} icon={<BarChart3 size={17} />} label="Events" onClick={() => setTab("events")} />
         </nav>
       </aside>
@@ -182,7 +220,7 @@ export function App() {
         <header className="topbar">
           <div>
             <h1>{titleFor(tab)}</h1>
-            <span className="meta-line">{contacts.length} contacts · {campaigns.length} broadcasts</span>
+            <span className="meta-line">{contacts.length} contacts · {campaigns.length} broadcasts · {automations.length} automations</span>
           </div>
           <div className="top-actions">
             {notice ? <span className="notice"><CheckCircle2 size={16} />{notice}</span> : null}
@@ -221,6 +259,15 @@ export function App() {
                 setSelectedCampaignId(id);
                 setTab("events");
               }}
+            />
+          ) : null}
+
+          {tab === "automations" ? (
+            <AutomationsView
+              automations={automations}
+              busy={busy}
+              onSeed={() => void runSeedWelcomeAutomation()}
+              onToggle={(id, enabled) => void runToggleAutomation(id, enabled)}
             />
           ) : null}
 
@@ -379,6 +426,89 @@ function CampaignView(props: {
   );
 }
 
+function AutomationsView(props: {
+  automations: AutomationSummary[];
+  busy: boolean;
+  onSeed: () => void;
+  onToggle: (id: string, enabled: boolean) => void;
+}) {
+  return (
+    <>
+      <div className="panel">
+        <div className="panel-head">
+          <h2>Sequences</h2>
+          <Workflow size={18} />
+        </div>
+        <p className="send-progress">
+          Multi-step flows on the same Worker + Queue + D1 stack. Seed the demo welcome sequence,
+          enable it, then submit a contact form — email → wait → follow-up → tag.
+        </p>
+        <div className="button-row">
+          <button className="primary" onClick={props.onSeed} disabled={props.busy}>
+            <Zap size={17} />Seed welcome sequence
+          </button>
+        </div>
+      </div>
+      <div className="panel">
+        <div className="panel-head">
+          <h2>Automations</h2>
+          <span>{props.automations.length}</span>
+        </div>
+        <div className="campaign-list">
+          {props.automations.length === 0 ? (
+            <p className="send-progress">No automations yet. Seed the welcome sequence to start.</p>
+          ) : null}
+          {props.automations.map((automation) => (
+            <div className="campaign-row automation-row" key={automation.id}>
+              <div>
+                <strong>{automation.name}</strong>
+                <span>
+                  {automation.triggerType} · {automation.steps.length} steps ·{" "}
+                  {automation.enrollmentCounts.active + automation.enrollmentCounts.waiting} in flight ·{" "}
+                  {automation.enrollmentCounts.completed} done
+                </span>
+                <ol className="step-list">
+                  {automation.steps.map((step) => (
+                    <li key={step.id}>{describeStep(step.stepType, step.config)}</li>
+                  ))}
+                </ol>
+              </div>
+              <StatusLabel value={automation.enabled ? "enabled" : "draft"} />
+              <button
+                className={automation.enabled ? "danger" : "primary"}
+                disabled={props.busy}
+                onClick={() => props.onToggle(automation.id, !automation.enabled)}
+              >
+                {automation.enabled ? "Disable" : "Enable"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function describeStep(stepType: string, config: Record<string, unknown>): string {
+  if (stepType === "send_email") {
+    return `Send email: ${String(config.subject ?? "(no subject)")}`;
+  }
+  if (stepType === "wait") {
+    const seconds = Number(config.seconds ?? 0);
+    if (seconds >= 86400 && seconds % 86400 === 0) {
+      return `Wait ${seconds / 86400} day(s)`;
+    }
+    if (seconds >= 60 && seconds % 60 === 0) {
+      return `Wait ${seconds / 60} minute(s)`;
+    }
+    return `Wait ${seconds}s`;
+  }
+  if (stepType === "add_tag") {
+    return `Add tag: ${String(config.tagName ?? "")}`;
+  }
+  return stepType;
+}
+
 function EventsView(props: {
   selectedCampaign?: Campaign;
   campaigns: Campaign[];
@@ -449,6 +579,7 @@ function titleFor(tab: Tab): string {
     contacts: "Contacts",
     imports: "Imports",
     campaigns: "Campaigns",
+    automations: "Automations",
     events: "Events"
   }[tab];
 }

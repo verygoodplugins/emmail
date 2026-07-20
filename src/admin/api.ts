@@ -1,4 +1,13 @@
-import type { Campaign, CampaignEvent, CampaignStats, ContactRow, CsvPreview, SampleDataSummary } from "./types";
+import type {
+  AutomationEnrollment,
+  AutomationSummary,
+  Campaign,
+  CampaignEvent,
+  CampaignStats,
+  ContactRow,
+  CsvPreview,
+  SampleDataSummary
+} from "./types";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(appPath(path), {
@@ -68,6 +77,24 @@ export function seedSampleData(): Promise<SampleDataSummary> {
 
 export function clearSampleData(): Promise<SampleDataSummary> {
   return requestJson<SampleDataSummary>("/api/sample-data/clear", { method: "POST" });
+}
+
+export function listAutomations(): Promise<AutomationSummary[]> {
+  return requestJson<AutomationSummary[]>("/api/automations");
+}
+
+export function seedWelcomeAutomation(): Promise<AutomationSummary> {
+  return requestJson<AutomationSummary>("/api/automations/seed-welcome", { method: "POST" });
+}
+
+export function setAutomationEnabled(id: string, enabled: boolean): Promise<AutomationSummary> {
+  return requestJson<AutomationSummary>(`/api/automations/${id}/${enabled ? "enable" : "disable"}`, {
+    method: "POST"
+  });
+}
+
+export function listAutomationEnrollments(id: string): Promise<AutomationEnrollment[]> {
+  return requestJson<AutomationEnrollment[]>(`/api/automations/${id}/enrollments`);
 }
 
 function appPath(path: string): string {

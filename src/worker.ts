@@ -1,5 +1,6 @@
 import type { Env, SendQueueMessage } from "./env";
 import { Resend } from "resend";
+import { AutomationRepository } from "./db/automation-repository";
 import { CampaignRepository } from "./db/campaign-repository";
 import { ContactRepository } from "./db/contact-repository";
 import { clearSampleData, getSampleDataStatus, seedSampleData } from "./db/sample-data";
@@ -8,6 +9,7 @@ import { basePathFromAppBaseUrl, rewriteRequestPath, stripBasePath } from "./lib
 import { previewContactsCsv } from "./lib/csv";
 import { createId, nowIso } from "./lib/ids";
 import { verifyToken } from "./lib/tokens";
+import { enqueueDueAutomations, maybeEnrollContactCreated, processAutomationEnrollment } from "./queue/automation";
 import { processCampaignSend } from "./queue/send";
 import { maybeEnqueueWelcome, processWelcomeSend } from "./queue/welcome";
 import { handleVerifiedResendWebhook } from "./webhooks/resend";
@@ -71,7 +73,37 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       } catch (error) {
         console.error("Welcome enqueue failed", error);
       }
+      // Multi-step automations (welcome sequence, etc.) enroll independently of
+      // the one-shot EMMAIL_WELCOME_ENABLED path. Keep only one of them armed
+      // for a given contact stream to avoid double emails.
+      try {
+        await maybeEnrollContactCreated(env, result.contact.id);
+      } catch (error) {
+        console.error("Automation enroll failed", error);
+      }
       return json({ ok: true, ...result });
+    }
+
+    if (request.method === "GET" && path === "/api/automations") {
+      return json(await new AutomationRepository(env.DB).listAutomations());
+    }
+
+    if (request.method === "POST" && path === "/api/automations/seed-welcome") {
+      return json(await new AutomationRepository(env.DB).ensureWelcomeSequence(), 201);
+    }
+
+    const automationToggleMatch = path.match(/^\/api\/automations\/([^/]+)\/(enable|disable)$/);
+    if (request.method === "POST" && automationToggleMatch) {
+      const automation = await new AutomationRepository(env.DB).setEnabled(
+        automationToggleMatch[1],
+        automationToggleMatch[2] === "enable"
+      );
+      return automation ? json(automation) : json({ error: "Not found" }, 404);
+    }
+
+    const automationEnrollmentsMatch = path.match(/^\/api\/automations\/([^/]+)\/enrollments$/);
+    if (request.method === "GET" && automationEnrollmentsMatch) {
+      return json(await new AutomationRepository(env.DB).listEnrollments(automationEnrollmentsMatch[1]));
     }
 
     if (request.method === "GET" && path === "/api/contacts") {
@@ -199,16 +231,22 @@ export default {
   fetch: handleRequest,
   async queue(batch: MessageBatch<SendQueueMessage>, env: Env): Promise<void> {
     const resend = new Resend(env.RESEND_API_KEY);
+    const emailAdapter = {
+      sendEmail: async (
+        payload: { from: string; to: string[]; subject: string; html: string; text: string; headers: Record<string, string> },
+        options: { idempotencyKey: string }
+      ) => {
+        const response = await resend.emails.send(payload, { idempotencyKey: options.idempotencyKey });
+        return { data: response.data, error: response.error };
+      }
+    };
     for (const message of batch.messages) {
       const body = message.body;
       try {
         if (body.type === "welcome") {
-          await processWelcomeSend(env, body, {
-            sendEmail: async (payload, options) => {
-              const response = await resend.emails.send(payload, { idempotencyKey: options.idempotencyKey });
-              return { data: response.data, error: response.error };
-            }
-          });
+          await processWelcomeSend(env, body, emailAdapter);
+        } else if (body.type === "automation") {
+          await processAutomationEnrollment(env, body, emailAdapter);
         } else {
           await processCampaignSend(env, body, {
             sendBatch: async (messages, options) => {
@@ -222,6 +260,17 @@ export default {
         console.error("Send message failed", error);
         message.retry();
       }
+    }
+  },
+  // Sweep due automation waits (and stuck active enrollments) every minute.
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    try {
+      const queued = await enqueueDueAutomations(env);
+      if (queued > 0) {
+        console.log(`Automation sweeper enqueued ${queued} enrollment(s)`);
+      }
+    } catch (error) {
+      console.error("Automation sweeper failed", error);
     }
   }
 };

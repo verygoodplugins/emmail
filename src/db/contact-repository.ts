@@ -71,6 +71,17 @@ export class ContactRepository {
     return Boolean(row);
   }
 
+  async addTagByName(contactId: string, tagName: string): Promise<void> {
+    const trimmed = tagName.trim();
+    if (!trimmed) {
+      return;
+    }
+    const tagId = await this.ensureNamedRecord("tags", "tag", trimmed);
+    await this.db.prepare(
+      "INSERT OR IGNORE INTO contact_tags (contact_id, tag_id, created_at) VALUES (?, ?, ?)"
+    ).bind(contactId, tagId, nowIso()).run();
+  }
+
   private async upsertContact(contact: ImportedContact): Promise<void> {
     const now = nowIso();
     const existing = await this.getContactByEmail(contact.email);
