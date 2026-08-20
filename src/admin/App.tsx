@@ -57,6 +57,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const createSequenceRef = useRef<(() => void) | null>(null);
+  const automationsDirtyRef = useRef(false);
   const [draft, setDraft] = useState({
     name: "June update",
     subject: "June update",
@@ -162,7 +163,7 @@ export function App() {
       const result = await sendCampaign(campaignId);
       setNotice(`${result.createdRecipients} recipients queued`);
       await refresh();
-      setTab("events");
+      requestTab("events");
     } finally {
       setBusy(false);
     }
@@ -192,6 +193,23 @@ export function App() {
     }
   }
 
+  function requestTab(next: Tab) {
+    if (
+      tab === "automations" &&
+      next !== "automations" &&
+      automationsDirtyRef.current &&
+      !window.confirm(
+        "You have unsaved sequence changes. Leave Automations and discard them?",
+      )
+    ) {
+      return;
+    }
+    if (next !== "automations") {
+      automationsDirtyRef.current = false;
+    }
+    setTab(next);
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -204,31 +222,31 @@ export function App() {
             active={tab === "contacts"}
             icon={<ContactRound size={17} />}
             label="Contacts"
-            onClick={() => setTab("contacts")}
+            onClick={() => requestTab("contacts")}
           />
           <NavButton
             active={tab === "imports"}
             icon={<FileUp size={17} />}
             label="Imports"
-            onClick={() => setTab("imports")}
+            onClick={() => requestTab("imports")}
           />
           <NavButton
             active={tab === "campaigns"}
             icon={<MailPlus size={17} />}
             label="Campaigns"
-            onClick={() => setTab("campaigns")}
+            onClick={() => requestTab("campaigns")}
           />
           <NavButton
             active={tab === "automations"}
             icon={<Workflow size={17} />}
             label="Automations"
-            onClick={() => setTab("automations")}
+            onClick={() => requestTab("automations")}
           />
           <NavButton
             active={tab === "events"}
             icon={<BarChart3 size={17} />}
             label="Events"
-            onClick={() => setTab("events")}
+            onClick={() => requestTab("events")}
           />
         </nav>
       </aside>
@@ -279,7 +297,10 @@ export function App() {
                 New sequence
               </button>
             ) : (
-              <button className="primary" onClick={() => setTab("campaigns")}>
+              <button
+                className="primary"
+                onClick={() => requestTab("campaigns")}
+              >
                 <MailPlus size={17} />
                 New broadcast
               </button>
@@ -313,7 +334,7 @@ export function App() {
               onSend={(id) => void runSendCampaign(id)}
               onSelect={(id) => {
                 setSelectedCampaignId(id);
-                setTab("events");
+                requestTab("events");
               }}
             />
           ) : null}
@@ -324,6 +345,9 @@ export function App() {
               busy={busy}
               createSequenceRef={createSequenceRef}
               onBusyChange={setBusy}
+              onDirtyChange={(dirty) => {
+                automationsDirtyRef.current = dirty;
+              }}
               onNotice={setNotice}
               onRefresh={refresh}
             />

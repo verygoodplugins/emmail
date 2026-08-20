@@ -9,7 +9,7 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import {
   createAutomation,
   listAutomationEnrollments,
@@ -42,6 +42,7 @@ interface AutomationsViewProps {
   busy: boolean;
   createSequenceRef: MutableRefObject<(() => void) | null>;
   onBusyChange: (busy: boolean) => void;
+  onDirtyChange: (dirty: boolean) => void;
   onNotice: (message: string) => void;
   onRefresh: () => Promise<void>;
 }
@@ -58,6 +59,16 @@ export function AutomationsView(props: AutomationsViewProps) {
   const [sampleFirstName, setSampleFirstName] = useState("Ada");
   const [sequencePreview, setSequencePreview] =
     useState<AutomationPreviewResult | null>(null);
+  const selectedIdRef = useRef(selectedId);
+  const previewEpochRef = useRef(0);
+  selectedIdRef.current = selectedId;
+
+  useEffect(() => {
+    props.onDirtyChange(dirty);
+    return () => {
+      props.onDirtyChange(false);
+    };
+  }, [dirty, props.onDirtyChange]);
 
   const welcomeExists = useMemo(
     () =>
@@ -151,6 +162,7 @@ export function AutomationsView(props: AutomationsViewProps) {
     ) {
       return;
     }
+    previewEpochRef.current += 1;
     setSelectedId(automation.id);
     setDraft(toEditorDraft(automation));
     setDirty(false);
@@ -158,11 +170,20 @@ export function AutomationsView(props: AutomationsViewProps) {
   }
 
   async function handleNewSequence() {
+    if (
+      dirty &&
+      !window.confirm(
+        "You have unsaved changes. Discard them and create a new sequence?",
+      )
+    ) {
+      return;
+    }
     props.onBusyChange(true);
     props.onNotice("");
     try {
       const automation = await createAutomation("New sequence");
       await props.onRefresh();
+      previewEpochRef.current += 1;
       setSelectedId(automation.id);
       setDraft(toEditorDraft(automation));
       setDirty(false);
@@ -176,11 +197,20 @@ export function AutomationsView(props: AutomationsViewProps) {
   }
 
   async function handleSeedWelcome() {
+    if (
+      dirty &&
+      !window.confirm(
+        "You have unsaved changes. Discard them and seed the welcome sequence?",
+      )
+    ) {
+      return;
+    }
     props.onBusyChange(true);
     props.onNotice("");
     try {
       const automation = await seedWelcomeAutomation();
       await props.onRefresh();
+      previewEpochRef.current += 1;
       setSelectedId(automation.id);
       setDraft(toEditorDraft(automation));
       setDirty(false);
@@ -248,6 +278,8 @@ export function AutomationsView(props: AutomationsViewProps) {
     if (!draft) {
       return;
     }
+    const previewForId = draft.id;
+    const previewEpoch = previewEpochRef.current;
     props.onBusyChange(true);
     props.onNotice("");
     try {
@@ -255,9 +287,21 @@ export function AutomationsView(props: AutomationsViewProps) {
         firstName: sampleFirstName,
         steps: draft.steps,
       });
+      if (
+        selectedIdRef.current !== previewForId ||
+        previewEpochRef.current !== previewEpoch
+      ) {
+        return;
+      }
       setSequencePreview(result);
       props.onNotice(`Preview ready for “${sampleFirstName || "there"}”`);
     } catch (error) {
+      if (
+        selectedIdRef.current !== previewForId ||
+        previewEpochRef.current !== previewEpoch
+      ) {
+        return;
+      }
       setSequencePreview(null);
       props.onNotice(error instanceof Error ? error.message : "Preview failed");
     } finally {
@@ -266,6 +310,7 @@ export function AutomationsView(props: AutomationsViewProps) {
   }
 
   function updateDraft(patch: Partial<EditorDraft>) {
+    previewEpochRef.current += 1;
     setDraft((current) => (current ? { ...current, ...patch } : current));
     setDirty(true);
     setSequencePreview(null);
