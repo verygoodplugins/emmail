@@ -23,20 +23,41 @@ For local Worker API development, copy the dummy local env file and apply the lo
 
 ```bash
 cp .dev.vars.example .dev.vars
-npm run db:migrate:local
+npm run dev:setup
+```
+
+### Hot-reload admin (recommended)
+
+Run the Worker API and Vite admin together. Vite proxies `/api` and `/login` to the local Worker, so auth cookies and API calls share the Vite origin:
+
+```bash
+npm run dev:local
+```
+
+Open **http://127.0.0.1:5173/login**, paste `EMMAIL_ADMIN_TOKEN` from `.dev.vars`, then use the admin at **http://127.0.0.1:5173/** with live UI reload.
+
+Or run the two processes in separate terminals:
+
+```bash
+npm run worker:dev   # http://127.0.0.1:8787
+npm run dev          # http://127.0.0.1:5173
+```
+
+### Worker-only preview
+
+Built admin assets served from Wrangler (rebuild after UI changes):
+
+```bash
+npm run build:admin
 npm run worker:dev
 ```
 
+Open **http://127.0.0.1:8787/login**.
+
 Admin auth fails closed: without `EMMAIL_ADMIN_TOKEN` set (in `.dev.vars`
 locally, as a secret in production) every admin page and `/api/*` route
-returns 401. `.dev.vars.example` ships a dummy local token; older `.dev.vars`
-copies need the line added by hand.
-
-The backend runs at `http://localhost:8787`. The Vite-only admin shell runs at `http://127.0.0.1:5173` with:
-
-```bash
-npm run dev
-```
+returns 401. `.dev.vars.example` ships a dummy local token; rotate it in your
+local `.dev.vars` before use.
 
 To load or clear the built-in demo records while the local Worker is running:
 
@@ -169,14 +190,20 @@ D1 + Queue stack (no extra services):
 ### Demo: welcome sequence
 
 1. Apply migrations (`npm run db:migrate:local` / remote).
-2. In admin → **Automations** → **Seed welcome sequence** (or
+2. In admin → **Automations**, use **Seed welcome** from the empty state (or
    `POST /api/automations/seed-welcome`).
-3. **Enable** the sequence (disabled by default — kill switch).
+3. Select the sequence in the editor, review steps, then **Enable** from the list
+   (disabled by default — kill switch; sequences with no steps cannot be enabled).
 4. Submit a contact form (or hit the ingest endpoint). The contact gets:
    - welcome email now
    - 2-minute wait (local demo default)
    - follow-up email
    - tag `welcome-sequence-complete`
+
+Disable a sequence before editing its name or steps. The admin editor supports
+creating blank sequences, reordering `send_email` / `wait` / `add_tag` steps,
+**Preview sequence** (unsaved draft + sample first name; does not send mail),
+and viewing recent enrollments.
 
 Copy lives in [`src/email/welcome.ts`](src/email/welcome.ts) (welcome + follow-up).
 Bodies support `{{first_name}}`. Sends honor `EMMAIL_SEND_MODE`, suppression, and
@@ -190,9 +217,27 @@ multi-step sequence and leave the one-shot welcome flag off.
 ### Admin/API
 
 - `GET /api/automations`
+- `POST /api/automations` — create blank sequence (`{ name }`)
+- `POST /api/automations/preview` — render unsaved draft timeline (`{ firstName?, steps }`)
+- `PATCH /api/automations/:id` — rename while disabled (`{ name }`)
+- `PUT /api/automations/:id/steps` — replace all steps while disabled (`{ steps: [{ stepType, config }] }`)
 - `POST /api/automations/seed-welcome`
-- `POST /api/automations/:id/enable` / `.../disable`
+- `POST /api/automations/:id/enable` / `.../disable` (enable requires ≥1 step)
 - `GET /api/automations/:id/enrollments`
+
+### Automated ingest / sequence checks
+
+Vitest covers the full HTTP ingest → enroll → drain path with a capturing
+email adapter (no Wrangler required):
+
+```bash
+npm test -- tests/worker/ingest-automation.test.ts
+```
+
+Shared helpers live in [`tests/helpers/mail-harness.ts`](tests/helpers/mail-harness.ts)
+(`createMailHarness`, `seedEnabledWelcomeSequence`). Reuse them when adding
+builder step tests or template assertions — captured emails expose
+`subject` / `html` / `text` / unsubscribe headers.
 
 ## Deferred
 

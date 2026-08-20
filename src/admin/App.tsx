@@ -8,14 +8,15 @@ import {
   FileUp,
   MailPlus,
   MousePointerClick,
+  Plus,
   RefreshCw,
   Send,
   Trash2,
   Upload,
   Workflow,
-  Zap
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AutomationsView } from "./AutomationsView";
 import {
   clearSampleData,
   commitImport,
@@ -27,15 +28,21 @@ import {
   listEvents,
   previewImport,
   seedSampleData,
-  seedWelcomeAutomation,
   sendCampaign,
-  setAutomationEnabled
 } from "./api";
-import type { AutomationSummary, Campaign, CampaignEvent, CampaignStats, ContactRow, CsvPreview } from "./types";
+import type {
+  AutomationSummary,
+  Campaign,
+  CampaignEvent,
+  CampaignStats,
+  ContactRow,
+  CsvPreview,
+} from "./types";
 
 type Tab = "contacts" | "imports" | "campaigns" | "automations" | "events";
 
-const seedCsv = "email,name,lists,tags\nada@example.com,Ada Lovelace,Newsletter,vip";
+const seedCsv =
+  "email,name,lists,tags\nada@example.com,Ada Lovelace,Newsletter,vip";
 
 export function App() {
   const [tab, setTab] = useState<Tab>("contacts");
@@ -49,13 +56,16 @@ export function App() {
   const [preview, setPreview] = useState<CsvPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const createSequenceRef = useRef<(() => void) | null>(null);
+  const automationsDirtyRef = useRef(false);
   const [draft, setDraft] = useState({
     name: "June update",
     subject: "June update",
     previewText: "A short note from the list",
-    markdownBody: "Hello **friends**,\n\nRead the latest update at [the site](https://example.com).",
+    markdownBody:
+      "Hello **friends**,\n\nRead the latest update at [the site](https://example.com).",
     lists: "Newsletter",
-    tags: ""
+    tags: "",
   });
 
   useEffect(() => {
@@ -68,25 +78,38 @@ export function App() {
 
   useEffect(() => {
     if (selectedCampaignId) {
-      void listEvents(selectedCampaignId).then(setEvents).catch(() => setEvents([]));
-      void getCampaignStats(selectedCampaignId).then(setStats).catch(() => setStats(null));
+      void listEvents(selectedCampaignId)
+        .then(setEvents)
+        .catch(() => setEvents([]));
+      void getCampaignStats(selectedCampaignId)
+        .then(setStats)
+        .catch(() => setStats(null));
     }
   }, [selectedCampaignId, campaigns]);
 
-  const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId) ?? campaigns[0];
+  const selectedCampaign =
+    campaigns.find((campaign) => campaign.id === selectedCampaignId) ??
+    campaigns[0];
 
   async function refresh() {
-    const [contactRows, campaignRows, automationRows] = await Promise.all([
+    const [contactRows, campaignRows, automationResult] = await Promise.all([
       listContacts(),
       listCampaigns(),
-      listAutomations().catch(() => [] as AutomationSummary[])
+      listAutomations().then(
+        (rows) => ({ ok: true as const, rows }),
+        () => ({ ok: false as const }),
+      ),
     ]);
     setContacts(contactRows);
     setCampaigns(campaignRows);
-    setAutomations(automationRows);
-    const nextCampaignId = selectedCampaignId && campaignRows.some((campaign) => campaign.id === selectedCampaignId)
-      ? selectedCampaignId
-      : campaignRows[0]?.id ?? "";
+    if (automationResult.ok) {
+      setAutomations(automationResult.rows);
+    }
+    const nextCampaignId =
+      selectedCampaignId &&
+      campaignRows.some((campaign) => campaign.id === selectedCampaignId)
+        ? selectedCampaignId
+        : (campaignRows[0]?.id ?? "");
     setSelectedCampaignId(nextCampaignId);
     if (!nextCampaignId) {
       setEvents([]);
@@ -127,8 +150,8 @@ export function App() {
         markdownBody: draft.markdownBody,
         audience: {
           listIds: splitAudience(draft.lists),
-          tagIds: splitAudience(draft.tags)
-        }
+          tagIds: splitAudience(draft.tags),
+        },
       });
       setSelectedCampaignId(campaign.id);
       setNotice("Broadcast drafted");
@@ -145,7 +168,7 @@ export function App() {
       const result = await sendCampaign(campaignId);
       setNotice(`${result.createdRecipients} recipients queued`);
       await refresh();
-      setTab("events");
+      requestTab("events");
     } finally {
       setBusy(false);
     }
@@ -175,33 +198,21 @@ export function App() {
     }
   }
 
-  async function runSeedWelcomeAutomation() {
-    setBusy(true);
-    setNotice("");
-    try {
-      const automation = await seedWelcomeAutomation();
-      setNotice(`Seeded “${automation.name}” (${automation.steps.length} steps)`);
-      await refresh();
-      setTab("automations");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Seed failed");
-    } finally {
-      setBusy(false);
+  function requestTab(next: Tab) {
+    if (
+      tab === "automations" &&
+      next !== "automations" &&
+      automationsDirtyRef.current &&
+      !window.confirm(
+        "You have unsaved sequence changes. Leave Automations and discard them?",
+      )
+    ) {
+      return;
     }
-  }
-
-  async function runToggleAutomation(id: string, enabled: boolean) {
-    setBusy(true);
-    setNotice("");
-    try {
-      const automation = await setAutomationEnabled(id, enabled);
-      setNotice(`${automation.name} ${enabled ? "enabled" : "disabled"}`);
-      await refresh();
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Toggle failed");
-    } finally {
-      setBusy(false);
+    if (next !== "automations") {
+      automationsDirtyRef.current = false;
     }
+    setTab(next);
   }
 
   return (
@@ -212,11 +223,36 @@ export function App() {
           <span>EmMail</span>
         </div>
         <nav className="nav-list" aria-label="Admin">
-          <NavButton active={tab === "contacts"} icon={<ContactRound size={17} />} label="Contacts" onClick={() => setTab("contacts")} />
-          <NavButton active={tab === "imports"} icon={<FileUp size={17} />} label="Imports" onClick={() => setTab("imports")} />
-          <NavButton active={tab === "campaigns"} icon={<MailPlus size={17} />} label="Campaigns" onClick={() => setTab("campaigns")} />
-          <NavButton active={tab === "automations"} icon={<Workflow size={17} />} label="Automations" onClick={() => setTab("automations")} />
-          <NavButton active={tab === "events"} icon={<BarChart3 size={17} />} label="Events" onClick={() => setTab("events")} />
+          <NavButton
+            active={tab === "contacts"}
+            icon={<ContactRound size={17} />}
+            label="Contacts"
+            onClick={() => requestTab("contacts")}
+          />
+          <NavButton
+            active={tab === "imports"}
+            icon={<FileUp size={17} />}
+            label="Imports"
+            onClick={() => requestTab("imports")}
+          />
+          <NavButton
+            active={tab === "campaigns"}
+            icon={<MailPlus size={17} />}
+            label="Campaigns"
+            onClick={() => requestTab("campaigns")}
+          />
+          <NavButton
+            active={tab === "automations"}
+            icon={<Workflow size={17} />}
+            label="Automations"
+            onClick={() => requestTab("automations")}
+          />
+          <NavButton
+            active={tab === "events"}
+            icon={<BarChart3 size={17} />}
+            label="Events"
+            onClick={() => requestTab("events")}
+          />
         </nav>
       </aside>
 
@@ -224,21 +260,63 @@ export function App() {
         <header className="topbar">
           <div>
             <h1>{titleFor(tab)}</h1>
-            <span className="meta-line">{contacts.length} contacts · {campaigns.length} broadcasts · {automations.length} automations</span>
+            <span className="meta-line">
+              {contacts.length} contacts · {campaigns.length} broadcasts ·{" "}
+              {automations.length}{" "}
+              {automations.length === 1 ? "automation" : "automations"}
+            </span>
           </div>
           <div className="top-actions">
-            {notice ? <span className="notice"><CheckCircle2 size={16} />{notice}</span> : null}
-            <button onClick={() => void runSeedSampleData()} disabled={busy}><Database size={17} />Load sample data</button>
-            <button className="danger" onClick={() => void runClearSampleData()} disabled={busy}><Trash2 size={17} />Clear sample data</button>
-            <button className="icon-button" aria-label="Refresh" onClick={() => void refresh()}><RefreshCw size={17} /></button>
-            <button className="primary" onClick={() => setTab("campaigns")}><MailPlus size={17} />New broadcast</button>
+            {notice ? (
+              <span className="notice">
+                <CheckCircle2 size={16} />
+                {notice}
+              </span>
+            ) : null}
+            <button onClick={() => void runSeedSampleData()} disabled={busy}>
+              <Database size={17} />
+              Load sample data
+            </button>
+            <button
+              className="danger"
+              onClick={() => void runClearSampleData()}
+              disabled={busy}
+            >
+              <Trash2 size={17} />
+              Clear sample data
+            </button>
+            <button
+              className="icon-button"
+              aria-label="Refresh"
+              onClick={() => void refresh()}
+            >
+              <RefreshCw size={17} />
+            </button>
+            {tab === "automations" ? (
+              <button
+                className="primary"
+                onClick={() => createSequenceRef.current?.()}
+                disabled={busy}
+              >
+                <Plus size={17} />
+                New sequence
+              </button>
+            ) : (
+              <button
+                className="primary"
+                onClick={() => requestTab("campaigns")}
+              >
+                <MailPlus size={17} />
+                New broadcast
+              </button>
+            )}
           </div>
         </header>
 
-        <section className="content-grid">
-          {tab === "contacts" ? (
-            <ContactsView contacts={contacts} />
-          ) : null}
+        <section
+          className={`content-grid${tab === "automations" ? " automations-layout" : ""}`}
+        >
+          {tab === "contacts" ? <ContactsView contacts={contacts} /> : null}
 
           {tab === "imports" ? (
             <ImportView
@@ -261,7 +339,7 @@ export function App() {
               onSend={(id) => void runSendCampaign(id)}
               onSelect={(id) => {
                 setSelectedCampaignId(id);
-                setTab("events");
+                requestTab("events");
               }}
             />
           ) : null}
@@ -270,8 +348,13 @@ export function App() {
             <AutomationsView
               automations={automations}
               busy={busy}
-              onSeed={() => void runSeedWelcomeAutomation()}
-              onToggle={(id, enabled) => void runToggleAutomation(id, enabled)}
+              createSequenceRef={createSequenceRef}
+              onBusyChange={setBusy}
+              onDirtyChange={(dirty) => {
+                automationsDirtyRef.current = dirty;
+              }}
+              onNotice={setNotice}
+              onRefresh={refresh}
             />
           ) : null}
 
@@ -291,9 +374,22 @@ export function App() {
   );
 }
 
-function NavButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
+function NavButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
   return (
-    <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}>
+    <button
+      className={`nav-button ${active ? "active" : ""}`}
+      onClick={onClick}
+    >
       {icon}
       <span>{label}</span>
       {active ? <ChevronRight size={16} /> : null}
@@ -323,8 +419,14 @@ function ContactsView({ contacts }: { contacts: ContactRow[] }) {
             {contacts.map((contact) => (
               <tr key={contact.id}>
                 <td>{contact.email}</td>
-                <td>{[contact.firstName, contact.lastName].filter(Boolean).join(" ")}</td>
-                <td><StatusLabel value={contact.status} /></td>
+                <td>
+                  {[contact.firstName, contact.lastName]
+                    .filter(Boolean)
+                    .join(" ")}
+                </td>
+                <td>
+                  <StatusLabel value={contact.status} />
+                </td>
                 <td>{contact.lists.join(", ")}</td>
                 <td>{contact.tags.join(", ")}</td>
               </tr>
@@ -351,20 +453,43 @@ function ImportView(props: {
           <h2>CSV import</h2>
           <Upload size={18} />
         </div>
-        <textarea className="csv-box" value={props.csv} onChange={(event) => props.setCsv(event.target.value)} />
+        <textarea
+          className="csv-box"
+          value={props.csv}
+          onChange={(event) => props.setCsv(event.target.value)}
+        />
         <div className="button-row">
-          <button onClick={props.onPreview} disabled={props.busy}>Preview</button>
-          <button className="primary" onClick={props.onCommit} disabled={props.busy}>Commit import</button>
+          <button onClick={props.onPreview} disabled={props.busy}>
+            Preview
+          </button>
+          <button
+            className="primary"
+            onClick={props.onCommit}
+            disabled={props.busy}
+          >
+            Commit import
+          </button>
         </div>
       </div>
       <div className="panel">
         <div className="panel-head">
           <h2>Import status</h2>
-          {props.preview?.summary.rejectedRows ? <CircleAlert size={18} /> : <CheckCircle2 size={18} />}
+          {props.preview?.summary.rejectedRows ? (
+            <CircleAlert size={18} />
+          ) : (
+            <CheckCircle2 size={18} />
+          )}
         </div>
         <div className="metric-row">
-          <Metric label="Accepted" value={props.preview?.summary.acceptedRows ?? 0} />
-          <Metric label="Rejected" value={props.preview?.summary.rejectedRows ?? 0} tone="coral" />
+          <Metric
+            label="Accepted"
+            value={props.preview?.summary.acceptedRows ?? 0}
+          />
+          <Metric
+            label="Rejected"
+            value={props.preview?.summary.rejectedRows ?? 0}
+            tone="coral"
+          />
         </div>
         <div className="reject-list">
           {(props.preview?.rejected ?? []).map((row) => (
@@ -380,15 +505,30 @@ function ImportView(props: {
 }
 
 function CampaignView(props: {
-  draft: { name: string; subject: string; previewText: string; markdownBody: string; lists: string; tags: string };
-  setDraft: (value: { name: string; subject: string; previewText: string; markdownBody: string; lists: string; tags: string }) => void;
+  draft: {
+    name: string;
+    subject: string;
+    previewText: string;
+    markdownBody: string;
+    lists: string;
+    tags: string;
+  };
+  setDraft: (value: {
+    name: string;
+    subject: string;
+    previewText: string;
+    markdownBody: string;
+    lists: string;
+    tags: string;
+  }) => void;
   campaigns: Campaign[];
   busy: boolean;
   onCreate: () => void;
   onSend: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
-  const update = (patch: Partial<typeof props.draft>) => props.setDraft({ ...props.draft, ...patch });
+  const update = (patch: Partial<typeof props.draft>) =>
+    props.setDraft({ ...props.draft, ...patch });
   return (
     <>
       <div className="panel">
@@ -397,15 +537,58 @@ function CampaignView(props: {
           <MailPlus size={18} />
         </div>
         <div className="form-grid">
-          <label>Name<input value={props.draft.name} onChange={(event) => update({ name: event.target.value })} /></label>
-          <label>Subject<input value={props.draft.subject} onChange={(event) => update({ subject: event.target.value })} /></label>
-          <label>Preview<input value={props.draft.previewText} onChange={(event) => update({ previewText: event.target.value })} /></label>
-          <label>Lists<input value={props.draft.lists} onChange={(event) => update({ lists: event.target.value })} /></label>
-          <label>Tags<input value={props.draft.tags} onChange={(event) => update({ tags: event.target.value })} /></label>
-          <label className="span-full">Markdown<textarea value={props.draft.markdownBody} onChange={(event) => update({ markdownBody: event.target.value })} /></label>
+          <label>
+            Name
+            <input
+              value={props.draft.name}
+              onChange={(event) => update({ name: event.target.value })}
+            />
+          </label>
+          <label>
+            Subject
+            <input
+              value={props.draft.subject}
+              onChange={(event) => update({ subject: event.target.value })}
+            />
+          </label>
+          <label>
+            Preview
+            <input
+              value={props.draft.previewText}
+              onChange={(event) => update({ previewText: event.target.value })}
+            />
+          </label>
+          <label>
+            Lists
+            <input
+              value={props.draft.lists}
+              onChange={(event) => update({ lists: event.target.value })}
+            />
+          </label>
+          <label>
+            Tags
+            <input
+              value={props.draft.tags}
+              onChange={(event) => update({ tags: event.target.value })}
+            />
+          </label>
+          <label className="span-full">
+            Markdown
+            <textarea
+              value={props.draft.markdownBody}
+              onChange={(event) => update({ markdownBody: event.target.value })}
+            />
+          </label>
         </div>
         <div className="button-row">
-          <button className="primary" onClick={props.onCreate} disabled={props.busy}><MailPlus size={17} />Save draft</button>
+          <button
+            className="primary"
+            onClick={props.onCreate}
+            disabled={props.busy}
+          >
+            <MailPlus size={17} />
+            Save draft
+          </button>
         </div>
       </div>
       <div className="panel">
@@ -421,69 +604,12 @@ function CampaignView(props: {
                 <span>{campaign.subject}</span>
               </button>
               <StatusLabel value={campaign.status} />
-              <button className="icon-button" aria-label={`Send ${campaign.name}`} onClick={() => props.onSend(campaign.id)}><Send size={16} /></button>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-}
-
-function AutomationsView(props: {
-  automations: AutomationSummary[];
-  busy: boolean;
-  onSeed: () => void;
-  onToggle: (id: string, enabled: boolean) => void;
-}) {
-  return (
-    <>
-      <div className="panel">
-        <div className="panel-head">
-          <h2>Sequences</h2>
-          <Workflow size={18} />
-        </div>
-        <p className="send-progress">
-          Multi-step flows on the same Worker + Queue + D1 stack. Seed the demo welcome sequence,
-          enable it, then submit a contact form — email → wait → follow-up → tag.
-        </p>
-        <div className="button-row">
-          <button className="primary" onClick={props.onSeed} disabled={props.busy}>
-            <Zap size={17} />Seed welcome sequence
-          </button>
-        </div>
-      </div>
-      <div className="panel">
-        <div className="panel-head">
-          <h2>Automations</h2>
-          <span>{props.automations.length}</span>
-        </div>
-        <div className="campaign-list">
-          {props.automations.length === 0 ? (
-            <p className="send-progress">No automations yet. Seed the welcome sequence to start.</p>
-          ) : null}
-          {props.automations.map((automation) => (
-            <div className="campaign-row automation-row" key={automation.id}>
-              <div>
-                <strong>{automation.name}</strong>
-                <span>
-                  {automation.triggerType} · {automation.steps.length} steps ·{" "}
-                  {automation.enrollmentCounts.active + automation.enrollmentCounts.waiting} in flight ·{" "}
-                  {automation.enrollmentCounts.completed} done
-                </span>
-                <ol className="step-list">
-                  {automation.steps.map((step) => (
-                    <li key={step.id}>{describeStep(step.stepType, step.config)}</li>
-                  ))}
-                </ol>
-              </div>
-              <StatusLabel value={automation.enabled ? "enabled" : "draft"} />
               <button
-                className={automation.enabled ? "danger" : "primary"}
-                disabled={props.busy}
-                onClick={() => props.onToggle(automation.id, !automation.enabled)}
+                className="icon-button"
+                aria-label={`Send ${campaign.name}`}
+                onClick={() => props.onSend(campaign.id)}
               >
-                {automation.enabled ? "Disable" : "Enable"}
+                <Send size={16} />
               </button>
             </div>
           ))}
@@ -491,26 +617,6 @@ function AutomationsView(props: {
       </div>
     </>
   );
-}
-
-function describeStep(stepType: string, config: Record<string, unknown>): string {
-  if (stepType === "send_email") {
-    return `Send email: ${String(config.subject ?? "(no subject)")}`;
-  }
-  if (stepType === "wait") {
-    const seconds = Number(config.seconds ?? 0);
-    if (seconds >= 86400 && seconds % 86400 === 0) {
-      return `Wait ${seconds / 86400} day(s)`;
-    }
-    if (seconds >= 60 && seconds % 60 === 0) {
-      return `Wait ${seconds / 60} minute(s)`;
-    }
-    return `Wait ${seconds}s`;
-  }
-  if (stepType === "add_tag") {
-    return `Add tag: ${String(config.tagName ?? "")}`;
-  }
-  return stepType;
 }
 
 function EventsView(props: {
@@ -530,12 +636,26 @@ function EventsView(props: {
           <h2>Events</h2>
           <MousePointerClick size={18} />
         </div>
-        <select value={props.selectedCampaignId} onChange={(event) => props.setSelectedCampaignId(event.target.value)}>
-          {props.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
+        <select
+          value={props.selectedCampaignId}
+          onChange={(event) => props.setSelectedCampaignId(event.target.value)}
+        >
+          {props.campaigns.map((campaign) => (
+            <option key={campaign.id} value={campaign.id}>
+              {campaign.name}
+            </option>
+          ))}
         </select>
         <div className="metric-row">
-          <Metric label="Open rate" value={formatRate(props.stats?.opened, props.stats?.sent)} />
-          <Metric label="Click rate" value={formatRate(props.stats?.clicked, props.stats?.sent)} tone="amber" />
+          <Metric
+            label="Open rate"
+            value={formatRate(props.stats?.opened, props.stats?.sent)}
+          />
+          <Metric
+            label="Click rate"
+            value={formatRate(props.stats?.clicked, props.stats?.sent)}
+            tone="amber"
+          />
         </div>
         <div className="mini-chart">
           <span style={{ width: `${openRate}%` }} />
@@ -565,7 +685,15 @@ function EventsView(props: {
   );
 }
 
-function Metric({ label, value, tone = "teal" }: { label: string; value: number | string; tone?: "teal" | "amber" | "coral" }) {
+function Metric({
+  label,
+  value,
+  tone = "teal",
+}: {
+  label: string;
+  value: number | string;
+  tone?: "teal" | "amber" | "coral";
+}) {
   return (
     <div className={`metric ${tone}`}>
       <span>{label}</span>
@@ -584,12 +712,15 @@ function titleFor(tab: Tab): string {
     imports: "Imports",
     campaigns: "Campaigns",
     automations: "Automations",
-    events: "Events"
+    events: "Events",
   }[tab];
 }
 
 function splitAudience(value: string): string[] {
-  return value.split(/[;,]/).map((entry) => entry.trim()).filter(Boolean);
+  return value
+    .split(/[;,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 function ratePercent(numerator?: number, denominator?: number): number {

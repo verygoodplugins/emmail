@@ -1,12 +1,14 @@
 import type {
   AutomationEnrollment,
+  AutomationPreviewResult,
   AutomationSummary,
   Campaign,
   CampaignEvent,
   CampaignStats,
   ContactRow,
   CsvPreview,
-  SampleDataSummary
+  SampleDataSummary,
+  StepDraft
 } from "./types";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -91,6 +93,44 @@ export function clearSampleData(): Promise<SampleDataSummary> {
 
 export function listAutomations(): Promise<AutomationSummary[]> {
   return requestJson<AutomationSummary[]>("/api/automations");
+}
+
+export function createAutomation(name: string): Promise<AutomationSummary> {
+  return requestJson<AutomationSummary>("/api/automations", {
+    method: "POST",
+    body: JSON.stringify({ name })
+  });
+}
+
+export function updateAutomationName(id: string, name: string): Promise<AutomationSummary> {
+  return requestJson<AutomationSummary>(`/api/automations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name })
+  });
+}
+
+export function replaceAutomationSteps(
+  id: string,
+  steps: StepDraft[],
+  options: { name?: string } = {},
+): Promise<AutomationSummary> {
+  return requestJson<AutomationSummary>(`/api/automations/${id}/steps`, {
+    method: "PUT",
+    body: JSON.stringify({
+      steps,
+      ...(options.name === undefined ? {} : { name: options.name }),
+    }),
+  });
+}
+
+export function previewAutomationDraft(input: {
+  firstName?: string;
+  steps: StepDraft[];
+}): Promise<AutomationPreviewResult> {
+  return requestJson<AutomationPreviewResult>("/api/automations/preview", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export function seedWelcomeAutomation(): Promise<AutomationSummary> {
