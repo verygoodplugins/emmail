@@ -8,7 +8,7 @@ import type {
   ContactRow,
   CsvPreview,
   SampleDataSummary,
-  StepDraft
+  StepDraft,
 } from "./types";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -16,8 +16,8 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       "content-type": "application/json",
-      ...init?.headers
-    }
+      ...init?.headers,
+    },
   });
   if (!response.ok) {
     throw new Error(await errorMessage(response));
@@ -28,7 +28,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 async function errorMessage(response: Response): Promise<string> {
   const fallback = `${response.status} ${response.statusText}`;
   try {
-    const body = await response.json() as { error?: string };
+    const body = (await response.json()) as { error?: string };
     return body.error ? `${fallback}: ${body.error}` : fallback;
   } catch {
     return fallback;
@@ -50,7 +50,7 @@ export async function previewImport(csv: string): Promise<CsvPreview> {
 export function commitImport(csv: string): Promise<CsvPreview> {
   return requestJson<CsvPreview>("/api/imports/commit", {
     method: "POST",
-    body: JSON.stringify({ csv })
+    body: JSON.stringify({ csv }),
   });
 }
 
@@ -67,7 +67,7 @@ export function createCampaign(input: {
 }): Promise<Campaign> {
   return requestJson<Campaign>("/api/campaigns", {
     method: "POST",
-    body: JSON.stringify(input)
+    body: JSON.stringify(input),
   });
 }
 
@@ -83,11 +83,13 @@ export function updateCampaign(
 ): Promise<Campaign> {
   return requestJson<Campaign>(`/api/campaigns/${campaignId}`, {
     method: "PATCH",
-    body: JSON.stringify(input)
+    body: JSON.stringify(input),
   });
 }
 
-export function sendCampaign(campaignId: string): Promise<{ createdRecipients: number; skippedSuppressed: number; queuedJobs: number }> {
+export function sendCampaign(
+  campaignId: string
+): Promise<{ createdRecipients: number; skippedSuppressed: number; queuedJobs: number }> {
   return requestJson(`/api/campaigns/${campaignId}/send`, { method: "POST" });
 }
 
@@ -114,21 +116,21 @@ export function listAutomations(): Promise<AutomationSummary[]> {
 export function createAutomation(name: string): Promise<AutomationSummary> {
   return requestJson<AutomationSummary>("/api/automations", {
     method: "POST",
-    body: JSON.stringify({ name })
+    body: JSON.stringify({ name }),
   });
 }
 
 export function updateAutomationName(id: string, name: string): Promise<AutomationSummary> {
   return requestJson<AutomationSummary>(`/api/automations/${id}`, {
     method: "PATCH",
-    body: JSON.stringify({ name })
+    body: JSON.stringify({ name }),
   });
 }
 
 export function replaceAutomationSteps(
   id: string,
   steps: StepDraft[],
-  options: { name?: string } = {},
+  options: { name?: string } = {}
 ): Promise<AutomationSummary> {
   return requestJson<AutomationSummary>(`/api/automations/${id}/steps`, {
     method: "PUT",
@@ -145,7 +147,7 @@ export function previewAutomationDraft(input: {
 }): Promise<AutomationPreviewResult> {
   return requestJson<AutomationPreviewResult>("/api/automations/preview", {
     method: "POST",
-    body: JSON.stringify(input)
+    body: JSON.stringify(input),
   });
 }
 
@@ -154,9 +156,12 @@ export function seedWelcomeAutomation(): Promise<AutomationSummary> {
 }
 
 export function setAutomationEnabled(id: string, enabled: boolean): Promise<AutomationSummary> {
-  return requestJson<AutomationSummary>(`/api/automations/${id}/${enabled ? "enable" : "disable"}`, {
-    method: "POST"
-  });
+  return requestJson<AutomationSummary>(
+    `/api/automations/${id}/${enabled ? "enable" : "disable"}`,
+    {
+      method: "POST",
+    }
+  );
 }
 
 export function listAutomationEnrollments(id: string): Promise<AutomationEnrollment[]> {

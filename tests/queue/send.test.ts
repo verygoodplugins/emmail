@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyMigrations, createSqliteD1 } from "../helpers/sqlite-d1";
 import { ContactRepository } from "../../src/db/contact-repository";
 import { CampaignRepository, type CampaignRecord } from "../../src/db/campaign-repository";
-import { processCampaignSend, type ResendBatchAdapter, type ResendBatchMessage } from "../../src/queue/send";
+import {
+  processCampaignSend,
+  type ResendBatchAdapter,
+  type ResendBatchMessage,
+} from "../../src/queue/send";
 import type { CampaignSendMessage, Env } from "../../src/env";
 
 describe("campaign send queue", () => {
@@ -22,11 +26,13 @@ describe("campaign send queue", () => {
       DEFAULT_FROM_EMAIL: "news@example.com",
       DEFAULT_FROM_NAME: "EmMail",
       EMMAIL_INGEST_SECRET: "ingest_secret",
-      EMMAIL_SEND_MODE: "live"
+      EMMAIL_SEND_MODE: "live",
     };
   });
 
-  async function seedCampaign(contactCount: number): Promise<{ campaign: CampaignRecord; campaigns: CampaignRepository }> {
+  async function seedCampaign(
+    contactCount: number
+  ): Promise<{ campaign: CampaignRecord; campaigns: CampaignRepository }> {
     const contacts = new ContactRepository(env.DB);
     const campaigns = new CampaignRepository(env.DB);
     await contacts.importContacts(
@@ -36,7 +42,7 @@ describe("campaign send queue", () => {
         lastName: "Test",
         status: "subscribed",
         lists: ["Newsletter"],
-        tags: []
+        tags: [],
       }))
     );
     const campaign = await campaigns.createCampaign({
@@ -46,7 +52,7 @@ describe("campaign send queue", () => {
       markdownBody: "Hello [site](https://example.com)",
       fromName: "EmMail",
       fromEmail: "news@example.com",
-      audience: { listIds: ["Newsletter"], tagIds: [] }
+      audience: { listIds: ["Newsletter"], tagIds: [] },
     });
     await campaigns.snapshotAudience(campaign.id);
     return { campaign, campaigns };
@@ -74,7 +80,7 @@ describe("campaign send queue", () => {
     let counter = 0;
     const sendBatch = vi.fn(async (messages: ResendBatchMessage[]) => ({
       data: messages.map(() => ({ id: `email_${counter++}` })),
-      error: null
+      error: null,
     }));
     return { adapter: { sendBatch }, sendBatch };
   }
@@ -88,12 +94,14 @@ describe("campaign send queue", () => {
     expect(result).toEqual({ attempted: 1, sent: 1, failed: 0, batchIndex: 0, requeued: false });
     const recipients = await campaigns.listRecipientsForSend(campaign.id, 10, ["sent"]);
     expect(recipients[0].resendEmailId).toBe("email_0");
-    const calls = sendBatch.mock.calls as unknown as Array<[ResendBatchMessage[], { idempotencyKey: string }]>;
+    const calls = sendBatch.mock.calls as unknown as Array<
+      [ResendBatchMessage[], { idempotencyKey: string }]
+    >;
     const firstCall = calls[0]!;
     expect(firstCall[0][0]).toMatchObject({
       from: "EmMail <news@example.com>",
       to: ["contact0@example.com"],
-      subject: "June update"
+      subject: "June update",
     });
     expect(firstCall[1]).toMatchObject({ idempotencyKey: `batch-campaign/${campaign.id}/0` });
     const after = await campaigns.getCampaign(campaign.id);
@@ -111,13 +119,17 @@ describe("campaign send queue", () => {
     expect(results.map((result) => result.attempted)).toEqual([2, 2, 1]);
     expect(results.map((result) => result.batchIndex)).toEqual([0, 1, 2]);
     expect(results.map((result) => result.requeued)).toEqual([true, true, false]);
-    const keys = sendBatch.mock.calls.map((call) => (call[1] as { idempotencyKey: string }).idempotencyKey);
+    const keys = sendBatch.mock.calls.map(
+      (call) => (call[1] as { idempotencyKey: string }).idempotencyKey
+    );
     expect(keys).toEqual([0, 1, 2].map((index) => `batch-campaign/${campaign.id}/${index}`));
-    const sentEmails = sendBatch.mock.calls.flatMap((call) => (call[0] as ResendBatchMessage[]).map((message) => message.to[0]));
+    const sentEmails = sendBatch.mock.calls.flatMap((call) =>
+      (call[0] as ResendBatchMessage[]).map((message) => message.to[0])
+    );
     expect(new Set(sentEmails).size).toBe(5);
     expect(queuedMessages()).toEqual([
       { campaignId: campaign.id, limit: 2 },
-      { campaignId: campaign.id, limit: 2 }
+      { campaignId: campaign.id, limit: 2 },
     ]);
     const after = await campaigns.getCampaign(campaign.id);
     expect(after?.status).toBe("sent");
@@ -136,7 +148,9 @@ describe("campaign send queue", () => {
     const redelivered = await processCampaignSend(env, message, adapter);
 
     expect(redelivered.batchIndex).toBe(1);
-    const perCallEmails = sendBatch.mock.calls.map((call) => (call[0] as ResendBatchMessage[]).map((m) => m.to[0]));
+    const perCallEmails = sendBatch.mock.calls.map((call) =>
+      (call[0] as ResendBatchMessage[]).map((m) => m.to[0])
+    );
     expect(perCallEmails[0]).not.toEqual(expect.arrayContaining(perCallEmails[1]));
     expect(new Set(perCallEmails.flat()).size).toBe(4);
   });
@@ -154,8 +168,14 @@ describe("campaign send queue", () => {
     const retry = await processCampaignSend(env, { campaignId: campaign.id, limit: 2 }, adapter);
 
     expect(retry.batchIndex).toBe(0);
-    const failedCall = failing.mock.calls[0] as unknown as [ResendBatchMessage[], { idempotencyKey: string }];
-    const retryCall = sendBatch.mock.calls[0] as unknown as [ResendBatchMessage[], { idempotencyKey: string }];
+    const failedCall = failing.mock.calls[0] as unknown as [
+      ResendBatchMessage[],
+      { idempotencyKey: string },
+    ];
+    const retryCall = sendBatch.mock.calls[0] as unknown as [
+      ResendBatchMessage[],
+      { idempotencyKey: string },
+    ];
     expect(retryCall[1].idempotencyKey).toBe(failedCall[1].idempotencyKey);
     expect(retryCall[0].map((m) => m.to)).toEqual(failedCall[0].map((m) => m.to));
   });
@@ -164,7 +184,7 @@ describe("campaign send queue", () => {
     const { campaign, campaigns } = await seedCampaign(1);
     const sendBatch = vi.fn(async () => ({
       data: null,
-      error: { name: "rate_limit_exceeded", message: "slow down" }
+      error: { name: "rate_limit_exceeded", message: "slow down" },
     }));
 
     await expect(
@@ -190,7 +210,7 @@ describe("campaign send queue", () => {
 
     expect(results.map((result) => ({ sent: result.sent, failed: result.failed }))).toEqual([
       { sent: 0, failed: 2 },
-      { sent: 1, failed: 0 }
+      { sent: 1, failed: 0 },
     ]);
     const after = await campaigns.getCampaign(campaign.id);
     expect(after?.status).toBe("sent");
@@ -215,7 +235,9 @@ describe("campaign send queue", () => {
     expect(recipients[0].resendEmailId).toBe("dry-run");
     const event = await env.DB.prepare(
       "SELECT type, provider_event_id, metadata_json FROM events WHERE recipient_id = ?"
-    ).bind(recipients[0].id).first<{ type: string; provider_event_id: string; metadata_json: string }>();
+    )
+      .bind(recipients[0].id)
+      .first<{ type: string; provider_event_id: string; metadata_json: string }>();
     expect(event).toMatchObject({ type: "send", provider_event_id: "dry-run" });
     expect(JSON.parse(event!.metadata_json)).toMatchObject({ mode: "dry-run" });
     const after = await campaigns.getCampaign(campaign.id);

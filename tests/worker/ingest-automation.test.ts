@@ -42,9 +42,7 @@ describe("ingest → automation sequence", () => {
       .queuedMessages()
       .filter((entry) => entry.body.type === "automation");
     expect(automationJobs).toHaveLength(1);
-    expect(
-      harness.queuedMessages().some((entry) => entry.body.type === "welcome"),
-    ).toBe(false);
+    expect(harness.queuedMessages().some((entry) => entry.body.type === "welcome")).toBe(false);
 
     const enrollmentId = String(automationJobs[0].body.enrollmentId);
 
@@ -62,7 +60,7 @@ describe("ingest → automation sequence", () => {
     expect(harness.emails[0].message.html).toContain("Ada");
     expect(harness.emails[0].message.html).toContain("South &amp; Ozarks");
     expect(harness.emails[0].idempotencyKey).toBe(
-      `automation/${enrollmentId}/${automation.steps[0].id}`,
+      `automation/${enrollmentId}/${automation.steps[0].id}`
     );
 
     let enrollment = await harness.automations.getEnrollment(enrollmentId);
@@ -79,9 +77,7 @@ describe("ingest → automation sequence", () => {
     enrollment = await harness.automations.getEnrollment(enrollmentId);
     expect(enrollment?.status).toBe("completed");
 
-    const refreshed = (
-      await harness.contacts.listContacts({ limit: 10, offset: 0 })
-    )[0];
+    const refreshed = (await harness.contacts.listContacts({ limit: 10, offset: 0 }))[0];
     expect(refreshed.tags).toContain("welcome-sequence-complete");
 
     const eventTypes = await harness.contactEventTypes(contact!.id);
@@ -92,11 +88,9 @@ describe("ingest → automation sequence", () => {
         "automation_email_sent",
         "automation_tag_added",
         "automation_completed",
-      ]),
+      ])
     );
-    expect(
-      eventTypes.filter((type) => type === "automation_email_sent"),
-    ).toHaveLength(2);
+    expect(eventTypes.filter((type) => type === "automation_email_sent")).toHaveLength(2);
   });
 
   it("does not enroll when the sequence is still disabled", async () => {
@@ -109,9 +103,7 @@ describe("ingest → automation sequence", () => {
     });
     expect(response.status).toBe(200);
     expect(
-      harness
-        .queuedMessages()
-        .filter((entry) => entry.body.type === "automation"),
+      harness.queuedMessages().filter((entry) => entry.body.type === "automation")
     ).toHaveLength(0);
   });
 
@@ -138,9 +130,7 @@ describe("ingest → automation sequence", () => {
       email: "probe@example.com",
     });
     const enrollmentId = String(
-      harness
-        .queuedMessages()
-        .find((entry) => entry.body.type === "automation")!.body.enrollmentId,
+      harness.queuedMessages().find((entry) => entry.body.type === "automation")!.body.enrollmentId
     );
 
     await harness.drainAutomation(enrollmentId);
@@ -149,7 +139,7 @@ describe("ingest → automation sequence", () => {
     expect(welcome.message.text).toContain("Template");
     expect(welcome.message.html).toMatch(/Hi Template,/);
     expect(welcome.message.headers["List-Unsubscribe"]).toMatch(
-      /^<https:\/\/mail\.example\.com\/unsubscribe\/c\//,
+      /^<https:\/\/mail\.example\.com\/unsubscribe\/c\//
     );
   });
 });

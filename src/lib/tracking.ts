@@ -16,7 +16,10 @@ export async function rewriteLinksForRecipient(
     }
     const token = await signToken(options.tokenSecret, "click", [options.recipientId, link.id]);
     const trackedUrl = `${trimSlash(options.baseUrl)}/t/click/${encodeURIComponent(options.recipientId)}/${encodeURIComponent(link.id)}/${token}`;
-    rewritten = rewritten.replace(new RegExp(`href=(["'])${escapeRegExp(link.url)}\\1`, "g"), `href="${trackedUrl}"`);
+    rewritten = rewritten.replace(
+      new RegExp(`href=(["'])${escapeRegExp(link.url)}\\1`, "g"),
+      `href="${trackedUrl}"`
+    );
   }
   return rewritten;
 }
@@ -25,7 +28,10 @@ export async function appendOpenPixel(
   html: string,
   options: { baseUrl: string; campaignId: string; recipientId: string; tokenSecret: string }
 ): Promise<string> {
-  const token = await signToken(options.tokenSecret, "open", [options.recipientId, options.campaignId]);
+  const token = await signToken(options.tokenSecret, "open", [
+    options.recipientId,
+    options.campaignId,
+  ]);
   const pixelUrl = `${trimSlash(options.baseUrl)}/t/open/${encodeURIComponent(options.recipientId)}/${encodeURIComponent(options.campaignId)}/${token}.gif`;
   const pixel = `<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none!important" />`;
   if (/<\/body>/i.test(html)) {
@@ -50,7 +56,12 @@ export function extractLinks(html: string): Array<{ url: string; position: numbe
 }
 
 function shouldSkipUrl(url: string): boolean {
-  return url.startsWith("mailto:") || url.startsWith("tel:") || url.startsWith("#") || url.includes("/unsubscribe/");
+  return (
+    url.startsWith("mailto:") ||
+    url.startsWith("tel:") ||
+    url.startsWith("#") ||
+    url.includes("/unsubscribe/")
+  );
 }
 
 function trimSlash(value: string): string {

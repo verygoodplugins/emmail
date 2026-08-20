@@ -1,14 +1,4 @@
-import {
-  ArrowDown,
-  ArrowUp,
-  Clock3,
-  Mail,
-  Plus,
-  Tag,
-  Trash2,
-  Workflow,
-  Zap,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, Clock3, Mail, Plus, Tag, Trash2, Workflow, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import {
   createAutomation,
@@ -60,8 +50,7 @@ export function AutomationsView(props: AutomationsViewProps) {
   const [dirty, setDirty] = useState(false);
   const [enrollments, setEnrollments] = useState<AutomationEnrollment[]>([]);
   const [sampleFirstName, setSampleFirstName] = useState("Ada");
-  const [sequencePreview, setSequencePreview] =
-    useState<AutomationPreviewResult | null>(null);
+  const [sequencePreview, setSequencePreview] = useState<AutomationPreviewResult | null>(null);
   const selectedIdRef = useRef(selectedId);
   const dirtyRef = useRef(dirty);
   const previewEpochRef = useRef(0);
@@ -90,11 +79,8 @@ export function AutomationsView(props: AutomationsViewProps) {
   }, [dirty]);
 
   const welcomeExists = useMemo(
-    () =>
-      props.automations.some(
-        (automation) => automation.slug === WELCOME_SEQUENCE_SLUG,
-      ),
-    [props.automations],
+    () => props.automations.some((automation) => automation.slug === WELCOME_SEQUENCE_SLUG),
+    [props.automations]
   );
 
   useEffect(() => {
@@ -106,31 +92,23 @@ export function AutomationsView(props: AutomationsViewProps) {
       return;
     }
     const currentId =
-      selectedId &&
-      props.automations.some((automation) => automation.id === selectedId)
+      selectedId && props.automations.some((automation) => automation.id === selectedId)
         ? selectedId
         : props.automations[0].id;
-    const current = props.automations.find(
-      (automation) => automation.id === currentId,
-    )!;
+    const current = props.automations.find((automation) => automation.id === currentId)!;
     if (!dirty) {
       setDraft(toEditorDraft(current));
       return;
     }
     // Keep unsaved step edits, but lock the editor if Enable flipped on the server.
     setDraft((existing) => {
-      if (
-        !existing ||
-        existing.id !== current.id ||
-        existing.enabled === current.enabled
-      ) {
+      if (!existing || existing.id !== current.id || existing.enabled === current.enabled) {
         return existing;
       }
       return {
         ...existing,
         enabled: current.enabled,
-        inFlight:
-          current.enrollmentCounts.active + current.enrollmentCounts.waiting,
+        inFlight: current.enrollmentCounts.active + current.enrollmentCounts.waiting,
       };
     });
   }, [props.automations, selectedId, dirty]);
@@ -171,9 +149,7 @@ export function AutomationsView(props: AutomationsViewProps) {
     if (
       dirtyRef.current &&
       automation.id !== selectedId &&
-      !window.confirm(
-        "You have unsaved changes. Discard them and switch sequences?",
-      )
+      !window.confirm("You have unsaved changes. Discard them and switch sequences?")
     ) {
       return;
     }
@@ -188,9 +164,7 @@ export function AutomationsView(props: AutomationsViewProps) {
   async function handleNewSequence() {
     if (
       dirtyRef.current &&
-      !window.confirm(
-        "You have unsaved changes. Discard them and create a new sequence?",
-      )
+      !window.confirm("You have unsaved changes. Discard them and create a new sequence?")
     ) {
       return;
     }
@@ -216,9 +190,7 @@ export function AutomationsView(props: AutomationsViewProps) {
   async function handleSeedWelcome() {
     if (
       dirtyRef.current &&
-      !window.confirm(
-        "You have unsaved changes. Discard them and seed the welcome sequence?",
-      )
+      !window.confirm("You have unsaved changes. Discard them and seed the welcome sequence?")
     ) {
       return;
     }
@@ -233,9 +205,7 @@ export function AutomationsView(props: AutomationsViewProps) {
       props.onSelectId(automation.id);
       setDraft(toEditorDraft(automation));
       setSequencePreview(null);
-      props.onNotice(
-        `Seeded “${automation.name}” (${automation.steps.length} steps)`,
-      );
+      props.onNotice(`Seeded “${automation.name}” (${automation.steps.length} steps)`);
     } catch (error) {
       props.onNotice(error instanceof Error ? error.message : "Seed failed");
     } finally {
@@ -245,9 +215,7 @@ export function AutomationsView(props: AutomationsViewProps) {
 
   async function handleToggle(id: string, enabled: boolean) {
     if (dirty && id === selectedId) {
-      props.onNotice(
-        "Save or discard edits before enabling or disabling this sequence",
-      );
+      props.onNotice("Save or discard edits before enabling or disabling this sequence");
       return;
     }
     props.onBusyChange(true);
@@ -280,20 +248,14 @@ export function AutomationsView(props: AutomationsViewProps) {
         name: savedName,
       });
       await props.onRefresh();
-      if (
-        selectedIdRef.current !== saveForId ||
-        previewEpochRef.current !== saveEpoch
-      ) {
+      if (selectedIdRef.current !== saveForId || previewEpochRef.current !== saveEpoch) {
         return;
       }
       setDraft(toEditorDraft(saved));
       setDirty(false);
       props.onNotice(`Saved “${saved.name}”`);
     } catch (error) {
-      if (
-        selectedIdRef.current !== saveForId ||
-        previewEpochRef.current !== saveEpoch
-      ) {
+      if (selectedIdRef.current !== saveForId || previewEpochRef.current !== saveEpoch) {
         return;
       }
       props.onNotice(error instanceof Error ? error.message : "Save failed");
@@ -315,19 +277,13 @@ export function AutomationsView(props: AutomationsViewProps) {
         firstName: sampleFirstName,
         steps: draft.steps,
       });
-      if (
-        selectedIdRef.current !== previewForId ||
-        previewEpochRef.current !== previewEpoch
-      ) {
+      if (selectedIdRef.current !== previewForId || previewEpochRef.current !== previewEpoch) {
         return;
       }
       setSequencePreview(result);
       props.onNotice(`Preview ready for “${sampleFirstName || "there"}”`);
     } catch (error) {
-      if (
-        selectedIdRef.current !== previewForId ||
-        previewEpochRef.current !== previewEpoch
-      ) {
+      if (selectedIdRef.current !== previewForId || previewEpochRef.current !== previewEpoch) {
         return;
       }
       setSequencePreview(null);
@@ -355,7 +311,7 @@ export function AutomationsView(props: AutomationsViewProps) {
             ...patch,
             config: { ...step.config, ...(patch.config ?? {}) },
           }
-        : step,
+        : step
     );
     updateDraft({ steps });
   }
@@ -400,16 +356,10 @@ export function AutomationsView(props: AutomationsViewProps) {
         </div>
         {props.automations.length === 0 ? (
           <div className="automation-empty">
-            <p>
-              No sequences yet. Seed the demo welcome flow or start from a blank
-              sequence.
-            </p>
+            <p>No sequences yet. Seed the demo welcome flow or start from a blank sequence.</p>
             <div className="button-row">
               {!welcomeExists ? (
-                <button
-                  onClick={() => void handleSeedWelcome()}
-                  disabled={props.busy}
-                >
+                <button onClick={() => void handleSeedWelcome()} disabled={props.busy}>
                   <Zap size={17} />
                   Seed welcome sequence
                 </button>
@@ -428,10 +378,7 @@ export function AutomationsView(props: AutomationsViewProps) {
           <>
             {!welcomeExists ? (
               <div className="button-row automation-list-actions">
-                <button
-                  onClick={() => void handleSeedWelcome()}
-                  disabled={props.busy}
-                >
+                <button onClick={() => void handleSeedWelcome()} disabled={props.busy}>
                   <Zap size={17} />
                   Seed welcome
                 </button>
@@ -440,8 +387,7 @@ export function AutomationsView(props: AutomationsViewProps) {
             <div className="campaign-list">
               {props.automations.map((automation) => {
                 const inFlight =
-                  automation.enrollmentCounts.active +
-                  automation.enrollmentCounts.waiting;
+                  automation.enrollmentCounts.active + automation.enrollmentCounts.waiting;
                 return (
                   <div
                     className={`automation-list-row ${automation.id === selectedId ? "selected" : ""}`}
@@ -472,9 +418,7 @@ export function AutomationsView(props: AutomationsViewProps) {
                       </span>
                     </a>
                     <div className="automation-row-actions">
-                      <StatusLabel
-                        value={automation.enabled ? "enabled" : "draft"}
-                      />
+                      <StatusLabel value={automation.enabled ? "enabled" : "draft"} />
                       <button
                         className={automation.enabled ? "danger" : "primary"}
                         disabled={
@@ -487,9 +431,7 @@ export function AutomationsView(props: AutomationsViewProps) {
                             ? "Save edits before enabling or disabling"
                             : undefined
                         }
-                        onClick={() =>
-                          void handleToggle(automation.id, !automation.enabled)
-                        }
+                        onClick={() => void handleToggle(automation.id, !automation.enabled)}
                       >
                         {automation.enabled ? "Disable" : "Enable"}
                       </button>
@@ -508,9 +450,7 @@ export function AutomationsView(props: AutomationsViewProps) {
           <Workflow size={18} />
         </div>
         {!draft ? (
-          <p className="send-progress">
-            Select a sequence to view or edit its steps.
-          </p>
+          <p className="send-progress">Select a sequence to view or edit its steps.</p>
         ) : (
           <div className="automation-editor">
             {readOnly ? (
@@ -520,8 +460,8 @@ export function AutomationsView(props: AutomationsViewProps) {
             ) : null}
             {!readOnly && draft.inFlight > 0 ? (
               <p className="automation-lock-notice">
-                {draft.inFlight} contact(s) are mid-flow. Saving replaces all
-                steps; position-based enrollments may skip or repeat steps.
+                {draft.inFlight} contact(s) are mid-flow. Saving replaces all steps; position-based
+                enrollments may skip or repeat steps.
               </p>
             ) : null}
             <div className="form-grid">
@@ -530,9 +470,7 @@ export function AutomationsView(props: AutomationsViewProps) {
                 <input
                   value={draft.name}
                   disabled={readOnly || props.busy}
-                  onChange={(event) =>
-                    updateDraft({ name: event.target.value })
-                  }
+                  onChange={(event) => updateDraft({ name: event.target.value })}
                 />
               </label>
               <label>
@@ -559,10 +497,7 @@ export function AutomationsView(props: AutomationsViewProps) {
 
             {!readOnly ? (
               <div className="button-row automation-add-steps">
-                <button
-                  onClick={() => addStep("send_email")}
-                  disabled={props.busy}
-                >
+                <button onClick={() => addStep("send_email")} disabled={props.busy}>
                   <Mail size={16} />
                   Add email
                 </button>
@@ -570,10 +505,7 @@ export function AutomationsView(props: AutomationsViewProps) {
                   <Clock3 size={16} />
                   Add wait
                 </button>
-                <button
-                  onClick={() => addStep("add_tag")}
-                  disabled={props.busy}
-                >
+                <button onClick={() => addStep("add_tag")} disabled={props.busy}>
                   <Tag size={16} />
                   Add tag
                 </button>
@@ -613,8 +545,8 @@ export function AutomationsView(props: AutomationsViewProps) {
               <div className="automation-preview">
                 <h3>Preview timeline</h3>
                 <p className="field-hint">
-                  Rendered for “{sequencePreview.sample.firstName || "there"}”
-                  from the unsaved draft. Does not send mail.
+                  Rendered for “{sequencePreview.sample.firstName || "there"}” from the unsaved
+                  draft. Does not send mail.
                 </p>
                 <ol className="preview-timeline">
                   {sequencePreview.timeline.map((item, index) => (
@@ -624,15 +556,9 @@ export function AutomationsView(props: AutomationsViewProps) {
                     >
                       <div className="preview-item-meta">
                         <strong>{item.timingLabel}</strong>
-                        {item.kind === "send_email" ? (
-                          <span>Send email</span>
-                        ) : null}
-                        {item.kind === "wait" ? (
-                          <span>Wait {item.durationLabel}</span>
-                        ) : null}
-                        {item.kind === "add_tag" ? (
-                          <span>Add tag “{item.tagName}”</span>
-                        ) : null}
+                        {item.kind === "send_email" ? <span>Send email</span> : null}
+                        {item.kind === "wait" ? <span>Wait {item.durationLabel}</span> : null}
+                        {item.kind === "add_tag" ? <span>Add tag “{item.tagName}”</span> : null}
                       </div>
                       {item.kind === "send_email" ? (
                         <div className="preview-email">
@@ -759,9 +685,7 @@ function StepCard(props: {
             <input
               value={String(props.step.config.subject ?? "")}
               readOnly={props.readOnly}
-              onChange={(event) =>
-                props.onChange({ config: { subject: event.target.value } })
-              }
+              onChange={(event) => props.onChange({ config: { subject: event.target.value } })}
             />
           </label>
           <label className="span-full">
@@ -769,9 +693,7 @@ function StepCard(props: {
             <input
               value={String(props.step.config.previewText ?? "")}
               readOnly={props.readOnly}
-              onChange={(event) =>
-                props.onChange({ config: { previewText: event.target.value } })
-              }
+              onChange={(event) => props.onChange({ config: { previewText: event.target.value } })}
             />
           </label>
           <label className="span-full">
@@ -779,13 +701,9 @@ function StepCard(props: {
             <textarea
               value={String(props.step.config.markdownBody ?? "")}
               readOnly={props.readOnly}
-              onChange={(event) =>
-                props.onChange({ config: { markdownBody: event.target.value } })
-              }
+              onChange={(event) => props.onChange({ config: { markdownBody: event.target.value } })}
             />
-            <span className="field-hint">
-              Use {"{{first_name}}"} for personalization.
-            </span>
+            <span className="field-hint">Use {"{{first_name}}"} for personalization.</span>
           </label>
         </div>
       ) : null}
@@ -804,9 +722,7 @@ function StepCard(props: {
           <input
             value={String(props.step.config.tagName ?? "")}
             readOnly={props.readOnly}
-            onChange={(event) =>
-              props.onChange({ config: { tagName: event.target.value } })
-            }
+            onChange={(event) => props.onChange({ config: { tagName: event.target.value } })}
           />
         </label>
       ) : null}
@@ -830,9 +746,7 @@ function WaitFields(props: {
           value={display.amount}
           readOnly={props.readOnly}
           onChange={(event) =>
-            props.onChange(
-              displayToSeconds(Number(event.target.value), display.unit),
-            )
+            props.onChange(displayToSeconds(Number(event.target.value), display.unit))
           }
         />
       </label>
@@ -842,9 +756,7 @@ function WaitFields(props: {
           value={display.unit}
           disabled={props.readOnly}
           onChange={(event) =>
-            props.onChange(
-              displayToSeconds(display.amount, event.target.value as WaitUnit),
-            )
+            props.onChange(displayToSeconds(display.amount, event.target.value as WaitUnit))
           }
         >
           <option value="seconds">Seconds</option>
@@ -864,8 +776,7 @@ function toEditorDraft(automation: AutomationSummary): EditorDraft {
     id: automation.id,
     name: automation.name,
     enabled: automation.enabled,
-    inFlight:
-      automation.enrollmentCounts.active + automation.enrollmentCounts.waiting,
+    inFlight: automation.enrollmentCounts.active + automation.enrollmentCounts.waiting,
     steps: automation.steps.map((step) => ({
       stepType: step.stepType,
       config: { ...step.config },

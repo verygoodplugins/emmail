@@ -35,18 +35,12 @@ export interface AutomationRunResult {
 // Enroll a contact into every enabled contact_created automation. Best-effort:
 // callers must not fail the ingest path if this throws. At-most-once enrollment
 // per (automation, contact) is enforced in the repository.
-export async function maybeEnrollContactCreated(
-  env: Env,
-  contactId: string,
-): Promise<number> {
+export async function maybeEnrollContactCreated(env: Env, contactId: string): Promise<number> {
   const automations = new AutomationRepository(env.DB);
   const enabled = await automations.listEnabledByTrigger("contact_created");
   let enrolled = 0;
   for (const automation of enabled) {
-    const { enrollment, created } = await automations.enrollContact(
-      automation.id,
-      contactId,
-    );
+    const { enrollment, created } = await automations.enrollContact(automation.id, contactId);
     if (!created) {
       continue;
     }
@@ -70,10 +64,7 @@ export async function maybeEnrollContactCreated(
 
 // Cron / recovery: re-queue enrollments that are due (waits elapsed, or active
 // rows whose immediate queue message was lost).
-export async function enqueueDueAutomations(
-  env: Env,
-  limit = 50,
-): Promise<number> {
+export async function enqueueDueAutomations(env: Env, limit = 50): Promise<number> {
   const automations = new AutomationRepository(env.DB);
   const due = await automations.listDueEnrollments(limit);
   for (const enrollment of due) {
@@ -91,7 +82,7 @@ export async function enqueueDueAutomations(
 export async function processAutomationEnrollment(
   env: Env,
   message: AutomationSendMessage,
-  resend: ResendEmailAdapter,
+  resend: ResendEmailAdapter
 ): Promise<AutomationRunResult> {
   const automations = new AutomationRepository(env.DB);
   const campaigns = new CampaignRepository(env.DB);
@@ -187,10 +178,7 @@ export async function processAutomationEnrollment(
       };
     }
 
-    const step = await automations.getStepAt(
-      current.automationId,
-      current.currentPosition,
-    );
+    const step = await automations.getStepAt(current.automationId, current.currentPosition);
     if (!step) {
       // Concurrent wakes can both reach "no more steps"; only the first transition
       // to completed should emit automation_completed.
@@ -266,9 +254,7 @@ export async function processAutomationEnrollment(
         contacts,
       });
       if (outcome === "retry") {
-        throw new Error(
-          `Retryable Resend automation error for enrollment ${current.id}`,
-        );
+        throw new Error(`Retryable Resend automation error for enrollment ${current.id}`);
       }
       if (outcome === "failed") {
         await automations.updateEnrollment(current.id, {
@@ -325,7 +311,7 @@ async function runSendEmailStep(
     resend: ResendEmailAdapter;
     campaigns: CampaignRepository;
     contacts: ContactRepository;
-  },
+  }
 ): Promise<"sent" | "dry-run" | "skipped" | "conflict" | "failed" | "retry"> {
   const { enrollment, step, contact, resend, campaigns, contacts } = input;
   const config = step.config as unknown as SendEmailConfig;
@@ -357,14 +343,8 @@ async function runSendEmailStep(
 
   const firstName = sanitizeName(contact.firstName);
   const subject = applyTemplate(String(config.subject ?? ""), firstName);
-  const previewText = applyTemplate(
-    String(config.previewText ?? ""),
-    firstName,
-  );
-  const markdownBody = applyTemplate(
-    String(config.markdownBody ?? ""),
-    firstName,
-  );
+  const previewText = applyTemplate(String(config.previewText ?? ""), firstName);
+  const markdownBody = applyTemplate(String(config.markdownBody ?? ""), firstName);
   const { html, text } = await renderCampaignEmail({
     previewText,
     markdownBody,
@@ -398,7 +378,7 @@ async function runSendEmailStep(
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
     },
-    { idempotencyKey: `automation/${enrollment.id}/${step.id}` },
+    { idempotencyKey: `automation/${enrollment.id}/${step.id}` }
   );
 
   if (result.error || !result.data) {
@@ -445,15 +425,12 @@ async function runSendEmailStep(
 async function scheduleWake(
   env: Env,
   enrollment: AutomationEnrollment,
-  secondsHint?: number,
+  secondsHint?: number
 ): Promise<void> {
   if (!enrollment.nextRunAt) {
     return;
   }
-  const remainingMs = Math.max(
-    0,
-    Date.parse(enrollment.nextRunAt) - Date.now(),
-  );
+  const remainingMs = Math.max(0, Date.parse(enrollment.nextRunAt) - Date.now());
   const remainingSeconds = secondsHint ?? Math.ceil(remainingMs / 1000);
   if (remainingSeconds <= 0) {
     await env.SEND_QUEUE.send({
@@ -465,19 +442,14 @@ async function scheduleWake(
   if (remainingSeconds <= MAX_QUEUE_DELAY_SECONDS) {
     await env.SEND_QUEUE.send(
       { type: "automation", enrollmentId: enrollment.id },
-      { delaySeconds: remainingSeconds },
+      { delaySeconds: remainingSeconds }
     );
     return;
   }
   // Longer waits: the scheduled sweeper will pick this up when next_run_at is due.
 }
 
-async function contactUnsubscribeUrl(
-  env: Env,
-  contactId: string,
-): Promise<string> {
-  const token = await signToken(env.TRACKING_SECRET, "unsubscribe-contact", [
-    contactId,
-  ]);
+async function contactUnsubscribeUrl(env: Env, contactId: string): Promise<string> {
+  const token = await signToken(env.TRACKING_SECRET, "unsubscribe-contact", [contactId]);
   return `${env.APP_BASE_URL.replace(/\/+$/, "")}/unsubscribe/c/${contactId}/${token}`;
 }

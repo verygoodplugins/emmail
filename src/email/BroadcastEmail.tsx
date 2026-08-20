@@ -6,7 +6,7 @@ import {
   Preview,
   Section,
   Tailwind,
-  Text
+  Text,
 } from "@react-email/components";
 
 export interface BroadcastEmailProps {

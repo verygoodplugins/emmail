@@ -7,7 +7,10 @@ import { signToken } from "../lib/tokens";
 import { appendOpenPixel, extractLinks, rewriteLinksForRecipient } from "../lib/tracking";
 
 export interface ResendBatchAdapter {
-  sendBatch(messages: ResendBatchMessage[], options: { idempotencyKey: string }): Promise<{ data: Array<{ id: string }> | null; error: unknown | null }>;
+  sendBatch(
+    messages: ResendBatchMessage[],
+    options: { idempotencyKey: string }
+  ): Promise<{ data: Array<{ id: string }> | null; error: unknown | null }>;
 }
 
 export interface ResendBatchMessage {
@@ -56,9 +59,12 @@ export async function processCampaignSend(
   } else {
     const rendered = await renderCampaignEmail({
       previewText: campaign.previewText,
-      markdownBody: campaign.markdownBody
+      markdownBody: campaign.markdownBody,
     });
-    const links = await campaigns.ensureLinks(campaign.id, extractLinks(rendered.html).map((link) => link.url));
+    const links = await campaigns.ensureLinks(
+      campaign.id,
+      extractLinks(rendered.html).map((link) => link.url)
+    );
 
     const messages: ResendBatchMessage[] = [];
     for (const recipient of recipients) {
@@ -68,13 +74,13 @@ export async function processCampaignSend(
         baseUrl: env.APP_BASE_URL,
         recipientId: recipient.id,
         links,
-        tokenSecret: env.TRACKING_SECRET
+        tokenSecret: env.TRACKING_SECRET,
       });
       const trackedHtml = await appendOpenPixel(linkedHtml, {
         baseUrl: env.APP_BASE_URL,
         campaignId: campaign.id,
         recipientId: recipient.id,
-        tokenSecret: env.TRACKING_SECRET
+        tokenSecret: env.TRACKING_SECRET,
       });
 
       messages.push({
@@ -85,13 +91,13 @@ export async function processCampaignSend(
         text: `${rendered.text}\n\nUnsubscribe: ${unsubscribeUrl}`,
         headers: {
           "List-Unsubscribe": `<${unsubscribeUrl}>`,
-          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"
-        }
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        },
       });
     }
 
     const result = await resend.sendBatch(messages, {
-      idempotencyKey: `batch-campaign/${campaign.id}/${batchIndex}`
+      idempotencyKey: `batch-campaign/${campaign.id}/${batchIndex}`,
     });
     if (result.error || !result.data) {
       if (isRetryableResendError(result.error)) {
@@ -127,7 +133,7 @@ export async function processCampaignSend(
     sent: recipients.length - failed,
     failed,
     batchIndex,
-    requeued
+    requeued,
   };
 }
 

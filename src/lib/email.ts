@@ -24,7 +24,10 @@ export function parseNameParts(value: string): { firstName: string; lastName: st
   return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
 }
 
-export function shouldSkipSuppressed(contact: ContactSendState, suppressedEmails: string[]): boolean {
+export function shouldSkipSuppressed(
+  contact: ContactSendState,
+  suppressedEmails: string[]
+): boolean {
   if (contact.status === "unsubscribed" || contact.status === "bounced") {
     return true;
   }

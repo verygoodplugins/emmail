@@ -6,11 +6,20 @@ export async function signToken(secret: string, purpose: string, parts: string[]
     false,
     ["sign"]
   );
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(tokenPayload(purpose, parts)));
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(tokenPayload(purpose, parts))
+  );
   return base64UrlEncode(new Uint8Array(signature));
 }
 
-export async function verifyToken(secret: string, purpose: string, parts: string[], token: string): Promise<boolean> {
+export async function verifyToken(
+  secret: string,
+  purpose: string,
+  parts: string[],
+  token: string
+): Promise<boolean> {
   const expected = await signToken(secret, purpose, parts);
   return timingSafeEqual(expected, token);
 }

@@ -66,7 +66,7 @@ describe("admin hash routes", () => {
         tab: "campaigns",
         campaignId: "cmp_june",
         automationId: "",
-      }),
+      })
     ).toBe("#/campaigns/cmp_june");
   });
 
@@ -76,15 +76,13 @@ describe("admin hash routes", () => {
       campaignId: "cmp_june",
       automationId: "",
     });
-    expect(campaignEventsHash("cmp_june")).toBe(
-      "#/campaigns/cmp_june/events",
-    );
+    expect(campaignEventsHash("cmp_june")).toBe("#/campaigns/cmp_june/events");
     expect(
       routeHash({
         tab: "events",
         campaignId: "cmp_june",
         automationId: "",
-      }),
+      })
     ).toBe("#/campaigns/cmp_june/events");
   });
 
@@ -94,15 +92,13 @@ describe("admin hash routes", () => {
       campaignId: "",
       automationId: "aut_welcome",
     });
-    expect(automationEditorHash("aut_welcome")).toBe(
-      "#/automations/aut_welcome",
-    );
+    expect(automationEditorHash("aut_welcome")).toBe("#/automations/aut_welcome");
     expect(
       routeHash({
         tab: "automations",
         campaignId: "",
         automationId: "aut_welcome",
-      }),
+      })
     ).toBe("#/automations/aut_welcome");
   });
 

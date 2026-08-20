@@ -39,6 +39,7 @@ Worker-only: `npm run build:admin && npm run worker:dev` → `http://127.0.0.1:8
 ## Verify before you say done
 
 ```bash
+npm run format:check
 npm run test:run
 npm run typecheck
 ```
@@ -78,8 +79,8 @@ Tests mirror layers under `tests/` (`core/`, `db/`, `queue/`, `worker/`). D1 tes
 
 ## Style
 
-TypeScript, two-space indent, semicolons, double quotes, strict types. Files kebab-case (`contact-repository.ts`); React/repository classes PascalCase; values/functions camelCase; env keys UPPER_SNAKE_CASE. Small functions. Fail closed on auth, missing secrets, and live send. No repo formatter — match neighbors.
+TypeScript, two-space indent, semicolons, double quotes, strict types. Format with Prettier (`npm run format` / `npm run format:check`) — config keeps double quotes. Files kebab-case (`contact-repository.ts`); React/repository classes PascalCase; values/functions camelCase; env keys UPPER_SNAKE_CASE. Small functions. Fail closed on auth, missing secrets, and live send.
 
 ## Git
 
-Concise imperative subjects. History mixes Conventional Commits for docs (`docs(welcome): …`) with `Add …` / `Fix …` for features. One concern per commit. PRs: behavior change, migration/config effects, issue link, screenshots for admin UI.
+Conventional Commits for commits and **PR titles** (`feat:`, `fix:`, `docs:`, `chore:`, …). Squash merges use the PR title as the commit on `main`, so titles are linted in CI. Do not prefix PR titles with `[codex]`, `[claude]`, `[wip]`, or similar — put agent context in the PR body. One concern per commit. PRs: behavior change, migration/config effects, issue link, screenshots for admin UI.

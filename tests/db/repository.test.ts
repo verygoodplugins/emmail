@@ -6,7 +6,7 @@ import {
   AutomationConflictError,
   AutomationEmptyStepsError,
   AutomationRepository,
-  AutomationValidationError
+  AutomationValidationError,
 } from "../../src/db/automation-repository";
 
 describe("D1 repositories", () => {
@@ -26,7 +26,7 @@ describe("D1 repositories", () => {
         lastName: "Lovelace",
         status: "subscribed",
         lists: ["Newsletter"],
-        tags: ["donor"]
+        tags: ["donor"],
       },
       {
         email: "grace@example.com",
@@ -34,8 +34,8 @@ describe("D1 repositories", () => {
         lastName: "Hopper",
         status: "subscribed",
         lists: ["Newsletter"],
-        tags: ["vip"]
-      }
+        tags: ["vip"],
+      },
     ]);
 
     expect(result).toEqual({ imported: 2 });
@@ -46,8 +46,8 @@ describe("D1 repositories", () => {
         lastName: "Byron",
         status: "subscribed",
         lists: ["Newsletter", "Clergy"],
-        tags: ["donor"]
-      }
+        tags: ["donor"],
+      },
     ]);
 
     const rows = await contacts.listContacts({ limit: 10, offset: 0 });
@@ -61,9 +61,30 @@ describe("D1 repositories", () => {
     const contacts = new ContactRepository(db);
     const campaigns = new CampaignRepository(db);
     await contacts.importContacts([
-      { email: "ada@example.com", firstName: "Ada", lastName: "Lovelace", status: "subscribed", lists: ["Newsletter"], tags: ["vip"] },
-      { email: "grace@example.com", firstName: "Grace", lastName: "Hopper", status: "subscribed", lists: ["Newsletter"], tags: ["vip"] },
-      { email: "skip@example.com", firstName: "Skip", lastName: "Me", status: "subscribed", lists: ["Newsletter"], tags: ["vip"] }
+      {
+        email: "ada@example.com",
+        firstName: "Ada",
+        lastName: "Lovelace",
+        status: "subscribed",
+        lists: ["Newsletter"],
+        tags: ["vip"],
+      },
+      {
+        email: "grace@example.com",
+        firstName: "Grace",
+        lastName: "Hopper",
+        status: "subscribed",
+        lists: ["Newsletter"],
+        tags: ["vip"],
+      },
+      {
+        email: "skip@example.com",
+        firstName: "Skip",
+        lastName: "Me",
+        status: "subscribed",
+        lists: ["Newsletter"],
+        tags: ["vip"],
+      },
     ]);
     await contacts.suppressEmail("skip@example.com", "unsubscribe", "test");
 
@@ -74,7 +95,7 @@ describe("D1 repositories", () => {
       markdownBody: "Hello [site](https://example.com)",
       fromName: "EmMail",
       fromEmail: "news@example.com",
-      audience: { listIds: ["Newsletter"], tagIds: ["vip"] }
+      audience: { listIds: ["Newsletter"], tagIds: ["vip"] },
     });
 
     const snapshot = await campaigns.snapshotAudience(campaign.id);
@@ -84,20 +105,25 @@ describe("D1 repositories", () => {
     const recipients = await campaigns.listRecipientsForSend(campaign.id, 10);
     // Ordering ties on created_at break on the random recipient id — stable
     // across retries of the same batch, but not alphabetical.
-    expect(recipients.map((recipient) => recipient.email).sort()).toEqual(["ada@example.com", "grace@example.com"]);
+    expect(recipients.map((recipient) => recipient.email).sort()).toEqual([
+      "ada@example.com",
+      "grace@example.com",
+    ]);
     expect((await campaigns.getCampaign(campaign.id))?.status).toBe("sending");
 
     const resumed = await campaigns.snapshotAudience(campaign.id);
     expect(resumed.createdRecipients).toBe(0);
-    await expect(campaigns.updateCampaign(campaign.id, {
-      name: "Too late",
-      subject: "Too late",
-      previewText: "",
-      markdownBody: "Nope",
-      fromName: "EmMail",
-      fromEmail: "news@example.com",
-      audience: { listIds: ["Newsletter"], tagIds: ["vip"] }
-    })).rejects.toThrow(CampaignConflictError);
+    await expect(
+      campaigns.updateCampaign(campaign.id, {
+        name: "Too late",
+        subject: "Too late",
+        previewText: "",
+        markdownBody: "Nope",
+        fromName: "EmMail",
+        fromEmail: "news@example.com",
+        audience: { listIds: ["Newsletter"], tagIds: ["vip"] },
+      })
+    ).rejects.toThrow(CampaignConflictError);
   });
 
   it("applies batch send results atomically with the batch marker", async () => {
@@ -110,8 +136,8 @@ describe("D1 repositories", () => {
       outcomes: [
         { recipient: recipients[0], status: "sent", resendEmailId: "email_1" },
         { recipient: recipients[1], status: "dry-run" },
-        { recipient: recipients[2], status: "failed", error: "boom" }
-      ]
+        { recipient: recipients[2], status: "failed", error: "boom" },
+      ],
     });
 
     const sent = await campaigns.getRecipient(recipients[0].id);
@@ -124,15 +150,18 @@ describe("D1 repositories", () => {
     const after = await campaigns.getCampaign(campaign.id);
     expect(after?.lastCompletedBatch).toBe(0);
 
-    const eventTypes = await db.prepare(
-      "SELECT type, contact_id FROM events WHERE campaign_id = ? ORDER BY type ASC"
-    ).bind(campaign.id).all();
+    const eventTypes = await db
+      .prepare("SELECT type, contact_id FROM events WHERE campaign_id = ? ORDER BY type ASC")
+      .bind(campaign.id)
+      .all();
     expect((eventTypes.results ?? []).map((row) => (row as { type: string }).type)).toEqual([
       "send",
       "send",
-      "send_failed"
+      "send_failed",
     ]);
-    expect((eventTypes.results ?? []).every((row) => (row as { contact_id: string | null }).contact_id)).toBe(true);
+    expect(
+      (eventTypes.results ?? []).every((row) => (row as { contact_id: string | null }).contact_id)
+    ).toBe(true);
   });
 
   it("counts recipients by status and rolls up campaign stats", async () => {
@@ -154,7 +183,7 @@ describe("D1 repositories", () => {
       opened: 1,
       clicked: 0,
       pending: 0,
-      failed: 1
+      failed: 1,
     });
   });
 
@@ -167,7 +196,7 @@ describe("D1 repositories", () => {
       opened: 0,
       clicked: 0,
       pending: 0,
-      failed: 0
+      failed: 0,
     });
   });
 
@@ -180,7 +209,7 @@ describe("D1 repositories", () => {
       markdownBody: "Hello",
       fromName: "EmMail",
       fromEmail: "news@example.com",
-      audience: { listIds: ["Newsletter"], tagIds: [] }
+      audience: { listIds: ["Newsletter"], tagIds: [] },
     });
 
     const updated = await campaigns.updateCampaign(campaign.id, {
@@ -190,7 +219,7 @@ describe("D1 repositories", () => {
       markdownBody: "Hello again",
       fromName: "EmMail",
       fromEmail: "news@example.com",
-      audience: { listIds: ["Newsletter"], tagIds: ["vip"] }
+      audience: { listIds: ["Newsletter"], tagIds: ["vip"] },
     });
 
     expect(updated).toMatchObject({
@@ -200,28 +229,32 @@ describe("D1 repositories", () => {
       previewText: "Later note",
       markdownBody: "Hello again",
       audience: { listIds: ["Newsletter"], tagIds: ["vip"] },
-      status: "draft"
+      status: "draft",
     });
-    expect(await campaigns.updateCampaign("cmp_missing", {
-      name: "Nope",
-      subject: "Nope",
-      previewText: "",
-      markdownBody: "Nope",
-      fromName: "EmMail",
-      fromEmail: "news@example.com",
-      audience: { listIds: [], tagIds: [] }
-    })).toBeNull();
+    expect(
+      await campaigns.updateCampaign("cmp_missing", {
+        name: "Nope",
+        subject: "Nope",
+        previewText: "",
+        markdownBody: "Nope",
+        fromName: "EmMail",
+        fromEmail: "news@example.com",
+        audience: { listIds: [], tagIds: [] },
+      })
+    ).toBeNull();
 
     await campaigns.updateCampaignStatus(campaign.id, "sending");
-    await expect(campaigns.updateCampaign(campaign.id, {
-      name: "Too late",
-      subject: "Too late",
-      previewText: "",
-      markdownBody: "Nope",
-      fromName: "EmMail",
-      fromEmail: "news@example.com",
-      audience: { listIds: ["Newsletter"], tagIds: [] }
-    })).rejects.toThrow(CampaignConflictError);
+    await expect(
+      campaigns.updateCampaign(campaign.id, {
+        name: "Too late",
+        subject: "Too late",
+        previewText: "",
+        markdownBody: "Nope",
+        fromName: "EmMail",
+        fromEmail: "news@example.com",
+        audience: { listIds: ["Newsletter"], tagIds: [] },
+      })
+    ).rejects.toThrow(CampaignConflictError);
   });
 });
 
@@ -243,7 +276,7 @@ describe("AutomationRepository", () => {
       slug: "onboarding-flow",
       triggerType: "contact_created",
       enabled: false,
-      steps: []
+      steps: [],
     });
     expect(second.slug).toBe("onboarding-flow-2");
   });
@@ -262,37 +295,45 @@ describe("AutomationRepository", () => {
     const saved = await repo.replaceSteps(created.id, [
       {
         stepType: "send_email",
-        config: { subject: "Hello", markdownBody: "Hi **there**" }
+        config: { subject: "Hello", markdownBody: "Hi **there**" },
       },
       {
         stepType: "wait",
-        config: { seconds: 60 }
+        config: { seconds: 60 },
       },
       {
         stepType: "add_tag",
-        config: { tagName: "onboarded" }
-      }
+        config: { tagName: "onboarded" },
+      },
     ]);
 
     expect(saved?.steps).toHaveLength(3);
     expect(saved?.steps[0]).toMatchObject({
       position: 0,
       stepType: "send_email",
-      config: { subject: "Hello", markdownBody: "Hi **there**" }
+      config: { subject: "Hello", markdownBody: "Hi **there**" },
     });
-    expect(saved?.steps[1]).toMatchObject({ position: 1, stepType: "wait", config: { seconds: 60 } });
-    expect(saved?.steps[2]).toMatchObject({ position: 2, stepType: "add_tag", config: { tagName: "onboarded" } });
+    expect(saved?.steps[1]).toMatchObject({
+      position: 1,
+      stepType: "wait",
+      config: { seconds: 60 },
+    });
+    expect(saved?.steps[2]).toMatchObject({
+      position: 2,
+      stepType: "add_tag",
+      config: { tagName: "onboarded" },
+    });
   });
 
   it("rejects writes while enabled", async () => {
     const repo = new AutomationRepository(db);
     const created = await repo.createAutomation("Live sequence");
-    await repo.replaceSteps(created.id, [
-      { stepType: "wait", config: { seconds: 30 } }
-    ]);
+    await repo.replaceSteps(created.id, [{ stepType: "wait", config: { seconds: 30 } }]);
     await repo.setEnabled(created.id, true);
 
-    await expect(repo.updateAutomationName(created.id, "Blocked")).rejects.toThrow(AutomationConflictError);
+    await expect(repo.updateAutomationName(created.id, "Blocked")).rejects.toThrow(
+      AutomationConflictError
+    );
     await expect(
       repo.replaceSteps(created.id, [{ stepType: "wait", config: { seconds: 60 } }])
     ).rejects.toThrow(AutomationConflictError);
@@ -310,7 +351,9 @@ describe("AutomationRepository", () => {
     const created = await repo.createAutomation("Draft sequence");
 
     await expect(
-      repo.replaceSteps(created.id, [{ stepType: "send_email", config: { subject: "", markdownBody: "" } }])
+      repo.replaceSteps(created.id, [
+        { stepType: "send_email", config: { subject: "", markdownBody: "" } },
+      ])
     ).rejects.toThrow(AutomationValidationError);
     await expect(
       repo.replaceSteps(created.id, [{ stepType: "wait", config: { seconds: 0 } }])
@@ -319,7 +362,9 @@ describe("AutomationRepository", () => {
       repo.replaceSteps(created.id, [{ stepType: "add_tag", config: { tagName: "" } }])
     ).rejects.toThrow(AutomationValidationError);
     await expect(
-      repo.replaceSteps(created.id, [{ stepType: "wait", config: undefined as unknown as Record<string, unknown> }])
+      repo.replaceSteps(created.id, [
+        { stepType: "wait", config: undefined as unknown as Record<string, unknown> },
+      ])
     ).rejects.toThrow(AutomationValidationError);
   });
 });
@@ -334,7 +379,7 @@ async function seedRecipients(db: D1Database, count: number) {
       lastName: "Test",
       status: "subscribed",
       lists: ["Newsletter"],
-      tags: []
+      tags: [],
     }))
   );
   const campaign = await campaigns.createCampaign({
@@ -344,7 +389,7 @@ async function seedRecipients(db: D1Database, count: number) {
     markdownBody: "Hello [site](https://example.com)",
     fromName: "EmMail",
     fromEmail: "news@example.com",
-    audience: { listIds: ["Newsletter"], tagIds: [] }
+    audience: { listIds: ["Newsletter"], tagIds: [] },
   });
   await campaigns.snapshotAudience(campaign.id);
   const recipients = await campaigns.listRecipientsForSend(campaign.id, count);

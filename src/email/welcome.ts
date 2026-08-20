@@ -9,11 +9,8 @@ export const WELCOME_PREVIEW = "We got your message — here's what happens next
 export function welcomeMarkdown(firstName: string): string {
   const name = sanitizeName(firstName);
   // Leave the literal {{first_name}} placeholder intact for automation templates.
-  const greeting = firstName === "{{first_name}}"
-    ? "Hi {{first_name}},"
-    : name
-      ? `Hi ${name},`
-      : "Hi there,";
+  const greeting =
+    firstName === "{{first_name}}" ? "Hi {{first_name}}," : name ? `Hi ${name},` : "Hi there,";
   return [
     greeting,
     "",
@@ -22,7 +19,7 @@ export function welcomeMarkdown(firstName: string): string {
     "If there's anything you'd like to add in the meantime, just reply to this email — it comes straight to us.",
     "",
     "Talk soon,",
-    "The South & Ozarks team"
+    "The South & Ozarks team",
   ].join("\n");
 }
 
@@ -31,11 +28,8 @@ export const FOLLOWUP_PREVIEW = "A quick check-in from South & Ozarks.";
 
 export function followupMarkdown(firstName: string): string {
   const name = sanitizeName(firstName);
-  const greeting = firstName === "{{first_name}}"
-    ? "Hi {{first_name}},"
-    : name
-      ? `Hi ${name},`
-      : "Hi there,";
+  const greeting =
+    firstName === "{{first_name}}" ? "Hi {{first_name}}," : name ? `Hi ${name},` : "Hi there,";
   return [
     greeting,
     "",
@@ -44,7 +38,7 @@ export function followupMarkdown(firstName: string): string {
     "If you're all set, no action needed.",
     "",
     "Thanks,",
-    "The South & Ozarks team"
+    "The South & Ozarks team",
   ].join("\n");
 }
 

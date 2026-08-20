@@ -23,22 +23,25 @@ export class CampaignRepository {
   async createCampaign(input: CampaignInput): Promise<CampaignRecord> {
     const now = nowIso();
     const id = createId("cmp");
-    await this.db.prepare(
-      `INSERT INTO campaigns
+    await this.db
+      .prepare(
+        `INSERT INTO campaigns
        (id, name, subject, preview_text, markdown_body, from_name, from_email, audience_json, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`
-    ).bind(
-      id,
-      input.name,
-      input.subject,
-      input.previewText,
-      input.markdownBody,
-      input.fromName,
-      input.fromEmail,
-      JSON.stringify(input.audience),
-      now,
-      now
-    ).run();
+      )
+      .bind(
+        id,
+        input.name,
+        input.subject,
+        input.previewText,
+        input.markdownBody,
+        input.fromName,
+        input.fromEmail,
+        JSON.stringify(input.audience),
+        now,
+        now
+      )
+      .run();
 
     const campaign = await this.getCampaign(id);
     if (!campaign) {
@@ -47,25 +50,25 @@ export class CampaignRepository {
     return campaign;
   }
 
-  async updateCampaign(
-    campaignId: string,
-    input: CampaignInput
-  ): Promise<CampaignRecord | null> {
+  async updateCampaign(campaignId: string, input: CampaignInput): Promise<CampaignRecord | null> {
     const now = nowIso();
-    const result = await this.db.prepare(
-      `UPDATE campaigns
+    const result = await this.db
+      .prepare(
+        `UPDATE campaigns
        SET name = ?, subject = ?, preview_text = ?, markdown_body = ?,
            audience_json = ?, updated_at = ?
        WHERE id = ? AND status = 'draft'`
-    ).bind(
-      input.name,
-      input.subject,
-      input.previewText,
-      input.markdownBody,
-      JSON.stringify(input.audience),
-      now,
-      campaignId
-    ).run();
+      )
+      .bind(
+        input.name,
+        input.subject,
+        input.previewText,
+        input.markdownBody,
+        JSON.stringify(input.audience),
+        now,
+        campaignId
+      )
+      .run();
     if (Number(result.meta?.changes ?? 0) === 0) {
       const existing = await this.getCampaign(campaignId);
       if (!existing) {
@@ -77,7 +80,10 @@ export class CampaignRepository {
   }
 
   async getCampaign(campaignId: string): Promise<CampaignRecord | null> {
-    const row = await this.db.prepare("SELECT * FROM campaigns WHERE id = ?").bind(campaignId).first<CampaignRow>();
+    const row = await this.db
+      .prepare("SELECT * FROM campaigns WHERE id = ?")
+      .bind(campaignId)
+      .first<CampaignRow>();
     return row ? mapCampaign(row) : null;
   }
 
@@ -86,13 +92,18 @@ export class CampaignRepository {
     return ((result.results ?? []) as unknown as CampaignRow[]).map(mapCampaign);
   }
 
-  async snapshotAudience(campaignId: string): Promise<{ createdRecipients: number; skippedSuppressed: number }> {
+  async snapshotAudience(
+    campaignId: string
+  ): Promise<{ createdRecipients: number; skippedSuppressed: number }> {
     const now = nowIso();
-    const claimed = await this.db.prepare(
-      `UPDATE campaigns
+    const claimed = await this.db
+      .prepare(
+        `UPDATE campaigns
        SET status = 'sending', updated_at = ?
        WHERE id = ? AND status = 'draft'`
-    ).bind(now, campaignId).run();
+      )
+      .bind(now, campaignId)
+      .run();
 
     const campaign = await this.getCampaign(campaignId);
     if (!campaign) {
@@ -111,7 +122,10 @@ export class CampaignRepository {
     let skippedSuppressed = 0;
 
     for (const contact of contacts) {
-      const suppressed = await this.db.prepare("SELECT id FROM suppressions WHERE email = ? LIMIT 1").bind(contact.email).first();
+      const suppressed = await this.db
+        .prepare("SELECT id FROM suppressions WHERE email = ? LIMIT 1")
+        .bind(contact.email)
+        .first();
       if (suppressed) {
         skippedSuppressed += 1;
         continue;
@@ -121,11 +135,14 @@ export class CampaignRepository {
       }
 
       const recipientId = createId("rcp");
-      const result = await this.db.prepare(
-        `INSERT OR IGNORE INTO campaign_recipients
+      const result = await this.db
+        .prepare(
+          `INSERT OR IGNORE INTO campaign_recipients
          (id, campaign_id, contact_id, email, status, created_at, updated_at)
          VALUES (?, ?, ?, ?, 'pending', ?, ?)`
-      ).bind(recipientId, campaignId, contact.id, contact.email, now, now).run();
+        )
+        .bind(recipientId, campaignId, contact.id, contact.email, now, now)
+        .run();
       createdRecipients += Number(result.meta?.changes ?? 0);
     }
 
@@ -143,26 +160,33 @@ export class CampaignRepository {
     statuses: string[] = ["pending"]
   ): Promise<CampaignRecipient[]> {
     const placeholders = statuses.map(() => "?").join(", ");
-    const result = await this.db.prepare(
-      `SELECT * FROM campaign_recipients
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM campaign_recipients
        WHERE campaign_id = ? AND status IN (${placeholders})
        ORDER BY created_at ASC, id ASC
        LIMIT ?`
-    ).bind(campaignId, ...statuses, limit).all();
+      )
+      .bind(campaignId, ...statuses, limit)
+      .all();
 
     return ((result.results ?? []) as unknown as RecipientRow[]).map(mapRecipient);
   }
 
   async countRecipientsByStatus(campaignId: string, status: string): Promise<number> {
-    const row = await this.db.prepare(
-      "SELECT COUNT(*) AS count FROM campaign_recipients WHERE campaign_id = ? AND status = ?"
-    ).bind(campaignId, status).first<{ count: number }>();
+    const row = await this.db
+      .prepare(
+        "SELECT COUNT(*) AS count FROM campaign_recipients WHERE campaign_id = ? AND status = ?"
+      )
+      .bind(campaignId, status)
+      .first<{ count: number }>();
     return Number(row?.count ?? 0);
   }
 
   async getCampaignStats(campaignId: string): Promise<CampaignStats> {
-    const row = await this.db.prepare(
-      `SELECT
+    const row = await this.db
+      .prepare(
+        `SELECT
          COUNT(*) AS total,
          SUM(CASE WHEN sent_at IS NOT NULL THEN 1 ELSE 0 END) AS sent,
          SUM(CASE WHEN delivered_at IS NOT NULL THEN 1 ELSE 0 END) AS delivered,
@@ -171,7 +195,9 @@ export class CampaignRepository {
          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
        FROM campaign_recipients WHERE campaign_id = ?`
-    ).bind(campaignId).first<Record<string, number | null>>();
+      )
+      .bind(campaignId)
+      .first<Record<string, number | null>>();
 
     return {
       total: Number(row?.total ?? 0),
@@ -180,7 +206,7 @@ export class CampaignRepository {
       opened: Number(row?.opened ?? 0),
       clicked: Number(row?.clicked ?? 0),
       pending: Number(row?.pending ?? 0),
-      failed: Number(row?.failed ?? 0)
+      failed: Number(row?.failed ?? 0),
     };
   }
 
@@ -197,39 +223,48 @@ export class CampaignRepository {
       if (outcome.status === "sent" || outcome.status === "dry-run") {
         const providerId = outcome.status === "sent" ? outcome.resendEmailId : "dry-run";
         statements.push(
-          this.db.prepare(
-            "UPDATE campaign_recipients SET status = 'sent', resend_email_id = ?, sent_at = ?, updated_at = ? WHERE id = ?"
-          ).bind(providerId, now, now, recipient.id)
+          this.db
+            .prepare(
+              "UPDATE campaign_recipients SET status = 'sent', resend_email_id = ?, sent_at = ?, updated_at = ? WHERE id = ?"
+            )
+            .bind(providerId, now, now, recipient.id)
         );
-        statements.push(this.eventStatement({
-          campaignId: recipient.campaignId,
-          contactId: recipient.contactId,
-          recipientId: recipient.id,
-          type: "send",
-          providerEventId: providerId,
-          metadata: outcome.status === "dry-run" ? { mode: "dry-run" } : {},
-          now
-        }));
+        statements.push(
+          this.eventStatement({
+            campaignId: recipient.campaignId,
+            contactId: recipient.contactId,
+            recipientId: recipient.id,
+            type: "send",
+            providerEventId: providerId,
+            metadata: outcome.status === "dry-run" ? { mode: "dry-run" } : {},
+            now,
+          })
+        );
       } else {
         statements.push(
-          this.db.prepare(
-            "UPDATE campaign_recipients SET status = 'failed', error = ?, updated_at = ? WHERE id = ?"
-          ).bind(outcome.error, now, recipient.id)
+          this.db
+            .prepare(
+              "UPDATE campaign_recipients SET status = 'failed', error = ?, updated_at = ? WHERE id = ?"
+            )
+            .bind(outcome.error, now, recipient.id)
         );
-        statements.push(this.eventStatement({
-          campaignId: recipient.campaignId,
-          contactId: recipient.contactId,
-          recipientId: recipient.id,
-          type: "send_failed",
-          providerEventId: null,
-          metadata: { error: outcome.error },
-          now
-        }));
+        statements.push(
+          this.eventStatement({
+            campaignId: recipient.campaignId,
+            contactId: recipient.contactId,
+            recipientId: recipient.id,
+            type: "send_failed",
+            providerEventId: null,
+            metadata: { error: outcome.error },
+            now,
+          })
+        );
       }
     }
 
     statements.push(
-      this.db.prepare("UPDATE campaigns SET last_completed_batch = ?, updated_at = ? WHERE id = ?")
+      this.db
+        .prepare("UPDATE campaigns SET last_completed_batch = ?, updated_at = ? WHERE id = ?")
         .bind(input.batchIndex, now, input.campaignId)
     );
 
@@ -245,31 +280,35 @@ export class CampaignRepository {
     metadata: Record<string, unknown>;
     now: string;
   }): D1PreparedStatement {
-    return this.db.prepare(
-      `INSERT INTO events
+    return this.db
+      .prepare(
+        `INSERT INTO events
        (id, campaign_id, contact_id, recipient_id, type, provider_event_id, link_id, url, metadata_json, created_at)
        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`
-    ).bind(
-      createId("evt"),
-      input.campaignId,
-      input.contactId,
-      input.recipientId,
-      input.type,
-      input.providerEventId,
-      JSON.stringify(input.metadata),
-      input.now
-    );
+      )
+      .bind(
+        createId("evt"),
+        input.campaignId,
+        input.contactId,
+        input.recipientId,
+        input.type,
+        input.providerEventId,
+        JSON.stringify(input.metadata),
+        input.now
+      );
   }
 
   async getRecipient(recipientId: string): Promise<CampaignRecipient | null> {
-    const row = await this.db.prepare("SELECT * FROM campaign_recipients WHERE id = ?")
+    const row = await this.db
+      .prepare("SELECT * FROM campaign_recipients WHERE id = ?")
       .bind(recipientId)
       .first<RecipientRow>();
     return row ? mapRecipient(row) : null;
   }
 
   async findRecipientByProviderId(providerId: string): Promise<CampaignRecipient | null> {
-    const row = await this.db.prepare("SELECT * FROM campaign_recipients WHERE resend_email_id = ?")
+    const row = await this.db
+      .prepare("SELECT * FROM campaign_recipients WHERE resend_email_id = ?")
       .bind(providerId)
       .first<RecipientRow>();
     return row ? mapRecipient(row) : null;
@@ -277,33 +316,54 @@ export class CampaignRepository {
 
   async markRecipientSent(recipientId: string, resendEmailId: string): Promise<void> {
     const now = nowIso();
-    await this.db.prepare(
-      "UPDATE campaign_recipients SET status = 'sent', resend_email_id = ?, sent_at = ?, updated_at = ? WHERE id = ?"
-    ).bind(resendEmailId, now, now, recipientId).run();
+    await this.db
+      .prepare(
+        "UPDATE campaign_recipients SET status = 'sent', resend_email_id = ?, sent_at = ?, updated_at = ? WHERE id = ?"
+      )
+      .bind(resendEmailId, now, now, recipientId)
+      .run();
     await this.recordEvent({ recipientId, type: "send", providerEventId: resendEmailId });
   }
 
   async markRecipientDryRun(recipientId: string): Promise<void> {
     const now = nowIso();
-    await this.db.prepare(
-      "UPDATE campaign_recipients SET status = 'sent', resend_email_id = 'dry-run', sent_at = ?, updated_at = ? WHERE id = ?"
-    ).bind(now, now, recipientId).run();
-    await this.recordEvent({ recipientId, type: "send", providerEventId: "dry-run", metadata: { mode: "dry-run" } });
+    await this.db
+      .prepare(
+        "UPDATE campaign_recipients SET status = 'sent', resend_email_id = 'dry-run', sent_at = ?, updated_at = ? WHERE id = ?"
+      )
+      .bind(now, now, recipientId)
+      .run();
+    await this.recordEvent({
+      recipientId,
+      type: "send",
+      providerEventId: "dry-run",
+      metadata: { mode: "dry-run" },
+    });
   }
 
   async markRecipientFailed(recipientId: string, error: string): Promise<void> {
     const now = nowIso();
-    await this.db.prepare(
-      "UPDATE campaign_recipients SET status = 'failed', error = ?, updated_at = ? WHERE id = ?"
-    ).bind(error, now, recipientId).run();
+    await this.db
+      .prepare(
+        "UPDATE campaign_recipients SET status = 'failed', error = ?, updated_at = ? WHERE id = ?"
+      )
+      .bind(error, now, recipientId)
+      .run();
     await this.recordEvent({ recipientId, type: "send_failed", metadata: { error } });
   }
 
-  async markRecipientEvent(recipientId: string, type: string, providerEventId?: string): Promise<void> {
+  async markRecipientEvent(
+    recipientId: string,
+    type: string,
+    providerEventId?: string
+  ): Promise<void> {
     const now = nowIso();
     const statusPatch = eventStatusPatch(type);
     if (statusPatch) {
-      await this.db.prepare(statusPatch.sql).bind(...statusPatch.bindings(now, providerEventId), recipientId).run();
+      await this.db
+        .prepare(statusPatch.sql)
+        .bind(...statusPatch.bindings(now, providerEventId), recipientId)
+        .run();
     }
     await this.recordEvent({ recipientId, type, providerEventId });
   }
@@ -321,42 +381,51 @@ export class CampaignRepository {
     let campaignId = input.campaignId ?? null;
     let contactId = input.contactId ?? null;
     if (input.recipientId && (!campaignId || !contactId)) {
-      const recipient = await this.db.prepare("SELECT campaign_id, contact_id FROM campaign_recipients WHERE id = ?")
+      const recipient = await this.db
+        .prepare("SELECT campaign_id, contact_id FROM campaign_recipients WHERE id = ?")
         .bind(input.recipientId)
         .first<{ campaign_id: string; contact_id: string }>();
       campaignId = campaignId ?? recipient?.campaign_id ?? null;
       contactId = contactId ?? recipient?.contact_id ?? null;
     }
 
-    await this.db.prepare(
-      `INSERT INTO events
+    await this.db
+      .prepare(
+        `INSERT INTO events
        (id, campaign_id, contact_id, recipient_id, type, provider_event_id, link_id, url, metadata_json, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      createId("evt"),
-      campaignId,
-      contactId,
-      input.recipientId ?? null,
-      input.type,
-      input.providerEventId ?? null,
-      input.linkId ?? null,
-      input.url ?? null,
-      JSON.stringify(input.metadata ?? {}),
-      nowIso()
-    ).run();
+      )
+      .bind(
+        createId("evt"),
+        campaignId,
+        contactId,
+        input.recipientId ?? null,
+        input.type,
+        input.providerEventId ?? null,
+        input.linkId ?? null,
+        input.url ?? null,
+        JSON.stringify(input.metadata ?? {}),
+        nowIso()
+      )
+      .run();
   }
 
   // Resolve a transactional send (welcome or automation email) back to its
   // contact by the Resend provider id stored on the send event. These emails
   // have no campaign_recipients row, so bounce/complaint webhooks use this to
   // find who to suppress.
-  async findWelcomeContactByProviderId(providerId: string): Promise<{ contactId: string; email: string } | null> {
-    const row = await this.db.prepare(
-      `SELECT c.id AS contactId, c.email AS email
+  async findWelcomeContactByProviderId(
+    providerId: string
+  ): Promise<{ contactId: string; email: string } | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT c.id AS contactId, c.email AS email
        FROM events e JOIN contacts c ON c.id = e.contact_id
        WHERE e.type IN ('welcome_sent', 'automation_email_sent') AND e.provider_event_id = ?
        LIMIT 1`
-    ).bind(providerId).first<{ contactId: string; email: string }>();
+      )
+      .bind(providerId)
+      .first<{ contactId: string; email: string }>();
     return row ?? null;
   }
 
@@ -367,44 +436,61 @@ export class CampaignRepository {
       return false;
     }
     const placeholders = types.map(() => "?").join(", ");
-    const row = await this.db.prepare(
-      `SELECT id FROM events WHERE contact_id = ? AND type IN (${placeholders}) LIMIT 1`
-    ).bind(contactId, ...types).first<{ id: string }>();
+    const row = await this.db
+      .prepare(`SELECT id FROM events WHERE contact_id = ? AND type IN (${placeholders}) LIMIT 1`)
+      .bind(contactId, ...types)
+      .first<{ id: string }>();
     return Boolean(row);
   }
 
-  async ensureLinks(campaignId: string, urls: string[]): Promise<Array<{ id: string; url: string; position: number }>> {
+  async ensureLinks(
+    campaignId: string,
+    urls: string[]
+  ): Promise<Array<{ id: string; url: string; position: number }>> {
     const now = nowIso();
     for (let position = 0; position < urls.length; position += 1) {
-      await this.db.prepare(
-        `INSERT OR IGNORE INTO campaign_links (id, campaign_id, url, position, created_at)
+      await this.db
+        .prepare(
+          `INSERT OR IGNORE INTO campaign_links (id, campaign_id, url, position, created_at)
          VALUES (?, ?, ?, ?, ?)`
-      ).bind(createId("lnk"), campaignId, urls[position], position, now).run();
+        )
+        .bind(createId("lnk"), campaignId, urls[position], position, now)
+        .run();
     }
     return this.listLinks(campaignId);
   }
 
-  async listLinks(campaignId: string): Promise<Array<{ id: string; url: string; position: number }>> {
-    const result = await this.db.prepare(
-      "SELECT id, url, position FROM campaign_links WHERE campaign_id = ? ORDER BY position ASC"
-    ).bind(campaignId).all();
+  async listLinks(
+    campaignId: string
+  ): Promise<Array<{ id: string; url: string; position: number }>> {
+    const result = await this.db
+      .prepare(
+        "SELECT id, url, position FROM campaign_links WHERE campaign_id = ? ORDER BY position ASC"
+      )
+      .bind(campaignId)
+      .all();
     return (result.results ?? []) as Array<{ id: string; url: string; position: number }>;
   }
 
   async getLink(linkId: string): Promise<{ id: string; campaignId: string; url: string } | null> {
-    const row = await this.db.prepare("SELECT id, campaign_id, url FROM campaign_links WHERE id = ?")
+    const row = await this.db
+      .prepare("SELECT id, campaign_id, url FROM campaign_links WHERE id = ?")
       .bind(linkId)
       .first<{ id: string; campaign_id: string; url: string }>();
     return row ? { id: row.id, campaignId: row.campaign_id, url: row.url } : null;
   }
 
   async updateCampaignStatus(campaignId: string, status: string): Promise<void> {
-    await this.db.prepare("UPDATE campaigns SET status = ?, updated_at = ? WHERE id = ?")
+    await this.db
+      .prepare("UPDATE campaigns SET status = ?, updated_at = ? WHERE id = ?")
       .bind(status, nowIso(), campaignId)
       .run();
   }
 
-  private async selectAudience(audience: { listIds: string[]; tagIds: string[] }): Promise<Array<{ id: string; email: string; status: string }>> {
+  private async selectAudience(audience: {
+    listIds: string[];
+    tagIds: string[];
+  }): Promise<Array<{ id: string; email: string; status: string }>> {
     const predicates = ["1 = 1"];
     const params: string[] = [];
 
@@ -432,9 +518,12 @@ export class CampaignRepository {
       params.push(...audience.tagIds, ...audience.tagIds);
     }
 
-    const result = await this.db.prepare(
-      `SELECT c.id, c.email, c.status FROM contacts c WHERE ${predicates.join(" AND ")} ORDER BY c.email ASC`
-    ).bind(...params).all();
+    const result = await this.db
+      .prepare(
+        `SELECT c.id, c.email, c.status FROM contacts c WHERE ${predicates.join(" AND ")} ORDER BY c.email ASC`
+      )
+      .bind(...params)
+      .all();
     return (result.results ?? []) as Array<{ id: string; email: string; status: string }>;
   }
 }
@@ -509,9 +598,10 @@ function mapCampaign(row: CampaignRow): CampaignRecord {
     fromEmail: row.from_email,
     audience: JSON.parse(row.audience_json),
     status: row.status,
-    lastCompletedBatch: row.last_completed_batch === null || row.last_completed_batch === undefined
-      ? null
-      : Number(row.last_completed_batch)
+    lastCompletedBatch:
+      row.last_completed_batch === null || row.last_completed_batch === undefined
+        ? null
+        : Number(row.last_completed_batch),
   };
 }
 
@@ -522,39 +612,41 @@ function mapRecipient(row: RecipientRow): CampaignRecipient {
     contactId: row.contact_id,
     email: row.email,
     status: row.status,
-    resendEmailId: row.resend_email_id
+    resendEmailId: row.resend_email_id,
   };
 }
 
-function eventStatusPatch(type: string): { sql: string; bindings: (now: string, providerEventId?: string) => unknown[] } | null {
+function eventStatusPatch(
+  type: string
+): { sql: string; bindings: (now: string, providerEventId?: string) => unknown[] } | null {
   if (type === "delivered") {
     return {
       sql: "UPDATE campaign_recipients SET status = 'delivered', delivered_at = ?, updated_at = ? WHERE id = ?",
-      bindings: (now) => [now, now]
+      bindings: (now) => [now, now],
     };
   }
   if (type === "bounced") {
     return {
       sql: "UPDATE campaign_recipients SET status = 'bounced', error = ?, updated_at = ? WHERE id = ?",
-      bindings: (now, providerEventId) => [providerEventId ?? "bounced", now]
+      bindings: (now, providerEventId) => [providerEventId ?? "bounced", now],
     };
   }
   if (type === "complained") {
     return {
       sql: "UPDATE campaign_recipients SET status = 'complained', error = ?, updated_at = ? WHERE id = ?",
-      bindings: (now, providerEventId) => [providerEventId ?? "complained", now]
+      bindings: (now, providerEventId) => [providerEventId ?? "complained", now],
     };
   }
   if (type === "opened") {
     return {
       sql: "UPDATE campaign_recipients SET status = 'opened', opened_at = ?, updated_at = ? WHERE id = ?",
-      bindings: (now) => [now, now]
+      bindings: (now) => [now, now],
     };
   }
   if (type === "clicked") {
     return {
       sql: "UPDATE campaign_recipients SET status = 'clicked', clicked_at = ?, updated_at = ? WHERE id = ?",
-      bindings: (now) => [now, now]
+      bindings: (now) => [now, now],
     };
   }
   return null;

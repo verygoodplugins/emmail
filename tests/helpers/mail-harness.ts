@@ -5,10 +5,7 @@ import { CampaignRepository } from "../../src/db/campaign-repository";
 import { ContactRepository } from "../../src/db/contact-repository";
 import { handleRequest } from "../../src/worker";
 import { processAutomationEnrollment } from "../../src/queue/automation";
-import type {
-  ResendEmailAdapter,
-  ResendEmailMessage,
-} from "../../src/queue/welcome";
+import type { ResendEmailAdapter, ResendEmailMessage } from "../../src/queue/welcome";
 import type { Env } from "../../src/env";
 
 export interface CapturedEmail {
@@ -28,14 +25,10 @@ export interface MailHarness {
     body: Record<string, unknown>;
     options?: unknown;
   }>;
-  drainAutomation: (
-    enrollmentId: string,
-  ) => ReturnType<typeof processAutomationEnrollment>;
+  drainAutomation: (enrollmentId: string) => ReturnType<typeof processAutomationEnrollment>;
   forceWaitDue: (enrollmentId: string) => Promise<void>;
   contactEventTypes: (contactId: string) => Promise<string[]>;
-  contactEvents: (
-    contactId: string,
-  ) => Promise<
+  contactEvents: (contactId: string) => Promise<
     Array<{
       type: string;
       metadata: Record<string, unknown> | null;
@@ -44,9 +37,7 @@ export interface MailHarness {
   >;
 }
 
-export async function createMailHarness(
-  overrides: Partial<Env> = {},
-): Promise<MailHarness> {
+export async function createMailHarness(overrides: Partial<Env> = {}): Promise<MailHarness> {
   const db = await createSqliteD1();
   await applyMigrations(db);
 
@@ -89,18 +80,15 @@ export async function createMailHarness(
     adapter,
     ingest(body) {
       return handleRequest(
-        new Request(
-          "https://mail.example.com/api/integrations/southandozarks/contact-message",
-          {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-emmail-ingest-secret": env.EMMAIL_INGEST_SECRET,
-            },
-            body: JSON.stringify(body),
+        new Request("https://mail.example.com/api/integrations/southandozarks/contact-message", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-emmail-ingest-secret": env.EMMAIL_INGEST_SECRET,
           },
-        ),
-        env,
+          body: JSON.stringify(body),
+        }),
+        env
       );
     },
     queuedMessages() {
@@ -111,11 +99,7 @@ export async function createMailHarness(
       }));
     },
     drainAutomation(enrollmentId) {
-      return processAutomationEnrollment(
-        env,
-        { type: "automation", enrollmentId },
-        adapter,
-      );
+      return processAutomationEnrollment(env, { type: "automation", enrollmentId }, adapter);
     },
     async forceWaitDue(enrollmentId) {
       await new AutomationRepository(db).updateEnrollment(enrollmentId, {
@@ -128,7 +112,7 @@ export async function createMailHarness(
           `SELECT type, metadata_json, provider_event_id
          FROM events
          WHERE contact_id = ?
-         ORDER BY created_at ASC, id ASC`,
+         ORDER BY created_at ASC, id ASC`
         )
         .bind(contactId)
         .all();
@@ -152,7 +136,7 @@ export async function createMailHarness(
           `SELECT type
          FROM events
          WHERE contact_id = ?
-         ORDER BY created_at ASC, id ASC`,
+         ORDER BY created_at ASC, id ASC`
         )
         .bind(contactId)
         .all();

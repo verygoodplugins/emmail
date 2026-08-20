@@ -1,7 +1,7 @@
 import {
   validateStepInput,
   type StepInput,
-  type AutomationStepType
+  type AutomationStepType,
 } from "../db/automation-repository";
 import { sanitizeName } from "./welcome";
 import { renderCampaignEmail } from "./render";
@@ -61,7 +61,7 @@ export async function buildAutomationPreview(input: {
         timingLabel,
         subject,
         previewText,
-        html
+        html,
       });
       continue;
     }
@@ -72,7 +72,7 @@ export async function buildAutomationPreview(input: {
         offsetSeconds,
         timingLabel,
         seconds,
-        durationLabel: formatDuration(seconds)
+        durationLabel: formatDuration(seconds),
       });
       offsetSeconds += seconds;
       continue;
@@ -82,14 +82,14 @@ export async function buildAutomationPreview(input: {
         kind: "add_tag",
         offsetSeconds,
         timingLabel,
-        tagName: String(step.config.tagName ?? "").trim()
+        tagName: String(step.config.tagName ?? "").trim(),
       });
     }
   }
 
   return {
     sample: { firstName },
-    timeline
+    timeline,
   };
 }
 
