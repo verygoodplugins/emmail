@@ -67,7 +67,7 @@ npx wrangler secret put EMMAIL_INGEST_SECRET
 npx wrangler secret put EMMAIL_ADMIN_TOKEN
 ```
 
-Set `APP_BASE_URL`, `DEFAULT_FROM_EMAIL`, `DEFAULT_FROM_NAME`, and `EMMAIL_SEND_MODE` in `wrangler.toml` for the deployed domain and verified Resend sender. The current deploy uses the `workers.dev` fallback URL because the active Cloudflare token cannot attach the preferred `southandozarks.autojack.ai/_emmail/*` route yet. Keep `EMMAIL_SEND_MODE=dry-run` until a real Resend key is set and the integration loop is verified.
+Set `APP_BASE_URL`, `DEFAULT_FROM_EMAIL`, `DEFAULT_FROM_NAME`, and `EMMAIL_SEND_MODE` in `wrangler.toml` for the deployed domain and verified Resend sender. Production lives at `https://emmail.autojack.ai`; the `workers.dev` URL remains as a fallback. Keep `EMMAIL_SEND_MODE=dry-run` until a real Resend key is set and the integration loop is verified.
 
 ## Sending
 
@@ -124,7 +124,7 @@ before it reaches the renderer.
 
 ## Admin
 
-The preferred production setup is Cloudflare Access protecting the admin route. The current `workers.dev` fallback uses `EMMAIL_ADMIN_TOKEN` as a Worker-level admin gate; if the token is unset, admin access is denied entirely (fail closed), so set the secret before deploying.
+The preferred production setup is Cloudflare Access protecting the admin route. Until that is wired, `https://emmail.autojack.ai` uses `EMMAIL_ADMIN_TOKEN` as a Worker-level admin gate; if the token is unset, admin access is denied entirely (fail closed), so set the secret before deploying. The current token is stored locally in `.dev.vars` (gitignored) and as the macOS Keychain item `emmail-admin-token`.
 
 Admin surfaces:
 
