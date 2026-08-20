@@ -24,6 +24,11 @@ describe("admin hash routes", () => {
       campaignId: "",
       automationId: "",
     });
+    expect(parseHash("#/campaigns/%")).toEqual({
+      tab: "campaigns",
+      campaignId: "%",
+      automationId: "",
+    });
   });
 
   it("parses section hashes for browser history and deep links", () => {

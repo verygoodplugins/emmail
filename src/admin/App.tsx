@@ -90,11 +90,11 @@ export function App() {
   const [notice, setNotice] = useState("");
   const createSequenceRef = useRef<(() => void) | null>(null);
   const automationsDirtyRef = useRef(false);
-  const tabRef = useRef(tab);
-  tabRef.current = tab;
+  const routeStateRef = useRef<AppRoute>(currentRoute());
   const [draft, setDraft] = useState(emptyDraft);
 
   function applyRoute(route: AppRoute) {
+    routeStateRef.current = route;
     setTab(route.tab);
     if (route.campaignId) {
       setSelectedCampaignId(route.campaignId);
@@ -110,25 +110,34 @@ export function App() {
     }
   }
 
-  function canLeave(next: Tab): boolean {
+  function canLeave(next: AppRoute): boolean {
+    const current = routeStateRef.current;
+    const dirty = automationsDirtyRef.current;
+    if (!dirty) {
+      return true;
+    }
+    const leavingAutomations =
+      current.tab === "automations" && next.tab !== "automations";
+    const switchingSequence =
+      current.tab === "automations" &&
+      next.tab === "automations" &&
+      next.automationId !== current.automationId;
     if (
-      tabRef.current === "automations" &&
-      next !== "automations" &&
-      automationsDirtyRef.current &&
+      (leavingAutomations || switchingSequence) &&
       !window.confirm(
         "You have unsaved sequence changes. Leave Automations and discard them?",
       )
     ) {
       return false;
     }
-    if (next !== "automations") {
+    if (leavingAutomations || switchingSequence) {
       automationsDirtyRef.current = false;
     }
     return true;
   }
 
   function navigate(route: AppRoute, replace = false) {
-    if (!canLeave(route.tab)) {
+    if (!canLeave(route)) {
       return;
     }
     const hash = routeHash(route);
@@ -156,7 +165,17 @@ export function App() {
       );
     }
     const onPop = () => {
-      applyRoute(currentRoute());
+      const route = currentRoute();
+      if (!canLeave(route)) {
+        const prev = routeStateRef.current;
+        history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}${routeHash(prev)}`,
+        );
+        return;
+      }
+      applyRoute(route);
     };
     window.addEventListener("popstate", onPop);
     window.addEventListener("hashchange", onPop);
@@ -322,6 +341,8 @@ export function App() {
       await updateCampaign(campaignId, campaignInputFromDraft(draft));
       setNotice("Broadcast saved");
       await refresh();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -346,7 +367,9 @@ export function App() {
     try {
       const result = await seedSampleData();
       setNotice(
-        `${result.contacts} sample contacts loaded · ${result.automations} automation`,
+        result.automations
+          ? `${result.contacts} sample contacts loaded · ${result.automations} automation`
+          : `${result.contacts} sample contacts loaded`,
       );
       await refresh();
     } finally {
@@ -756,6 +779,7 @@ function CampaignView(props: {
   const update = (patch: Partial<typeof props.draft>) =>
     props.setDraft({ ...props.draft, ...patch });
   const editing = Boolean(props.editingCampaignId);
+  const draftLocked = editing && props.editingCampaign?.status !== "draft";
   const editingStats = props.editingCampaignId
     ? (props.statsByCampaign[props.editingCampaignId] ?? null)
     : null;
@@ -813,6 +837,7 @@ function CampaignView(props: {
             Name
             <input
               value={props.draft.name}
+              disabled={draftLocked}
               onChange={(event) => update({ name: event.target.value })}
             />
           </label>
@@ -820,6 +845,7 @@ function CampaignView(props: {
             Subject
             <input
               value={props.draft.subject}
+              disabled={draftLocked}
               onChange={(event) => update({ subject: event.target.value })}
             />
           </label>
@@ -827,6 +853,7 @@ function CampaignView(props: {
             Preview
             <input
               value={props.draft.previewText}
+              disabled={draftLocked}
               onChange={(event) => update({ previewText: event.target.value })}
             />
           </label>
@@ -834,6 +861,7 @@ function CampaignView(props: {
             Lists
             <input
               value={props.draft.lists}
+              disabled={draftLocked}
               onChange={(event) => update({ lists: event.target.value })}
             />
           </label>
@@ -841,6 +869,7 @@ function CampaignView(props: {
             Tags
             <input
               value={props.draft.tags}
+              disabled={draftLocked}
               onChange={(event) => update({ tags: event.target.value })}
             />
           </label>
@@ -848,6 +877,7 @@ function CampaignView(props: {
             Markdown
             <textarea
               value={props.draft.markdownBody}
+              disabled={draftLocked}
               onChange={(event) => update({ markdownBody: event.target.value })}
             />
           </label>
@@ -864,13 +894,15 @@ function CampaignView(props: {
           {editing ? (
             <>
               <button onClick={props.onNew}>New broadcast</button>
-              <button
-                className="primary"
-                onClick={() => props.onSave(props.editingCampaignId)}
-                disabled={props.busy}
-              >
-                Save changes
-              </button>
+              {draftLocked ? null : (
+                <button
+                  className="primary"
+                  onClick={() => props.onSave(props.editingCampaignId)}
+                  disabled={props.busy}
+                >
+                  Save changes
+                </button>
+              )}
             </>
           ) : (
             <button

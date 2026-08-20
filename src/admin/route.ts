@@ -18,7 +18,7 @@ export function parseHash(hash: string): AppRoute {
   const raw = hash.startsWith("#") ? hash.slice(1) : hash;
   const parts = raw
     .split("/")
-    .map((part) => decodeURIComponent(part))
+    .map((part) => decodeHashPart(part))
     .filter(Boolean);
 
   if (parts[0] === "campaigns") {
@@ -46,6 +46,14 @@ export function parseHash(hash: string): AppRoute {
   }
 
   return { tab: "contacts", campaignId: "", automationId: "" };
+}
+
+function decodeHashPart(part: string): string {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return part;
+  }
 }
 
 export function routeHash(route: AppRoute): string {
