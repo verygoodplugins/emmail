@@ -200,9 +200,10 @@ export function AutomationsView(props: AutomationsViewProps) {
       const automation = await createAutomation("New sequence");
       await props.onRefresh();
       previewEpochRef.current += 1;
+      setDirty(false);
+      props.onDirtyChange(false);
       props.onSelectId(automation.id);
       setDraft(toEditorDraft(automation));
-      setDirty(false);
       setSequencePreview(null);
       props.onNotice(`Created “${automation.name}”`);
     } catch (error) {
@@ -227,9 +228,10 @@ export function AutomationsView(props: AutomationsViewProps) {
       const automation = await seedWelcomeAutomation();
       await props.onRefresh();
       previewEpochRef.current += 1;
+      setDirty(false);
+      props.onDirtyChange(false);
       props.onSelectId(automation.id);
       setDraft(toEditorDraft(automation));
-      setDirty(false);
       setSequencePreview(null);
       props.onNotice(
         `Seeded “${automation.name}” (${automation.steps.length} steps)`,

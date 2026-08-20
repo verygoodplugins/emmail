@@ -91,6 +91,7 @@ export function App() {
   const createSequenceRef = useRef<(() => void) | null>(null);
   const automationsDirtyRef = useRef(false);
   const routeStateRef = useRef<AppRoute>(currentRoute());
+  const loadedEditorIdRef = useRef("");
   const [draft, setDraft] = useState(emptyDraft);
 
   function applyRoute(route: AppRoute) {
@@ -226,11 +227,17 @@ export function App() {
 
   useEffect(() => {
     if (!editingCampaignId) {
+      loadedEditorIdRef.current = "";
       return;
     }
     const campaign = campaigns.find((row) => row.id === editingCampaignId);
     if (campaign) {
+      const loadKey = `${campaign.id}:${campaign.status}`;
+      if (loadedEditorIdRef.current === loadKey) {
+        return;
+      }
       setDraft(draftFromCampaign(campaign));
+      loadedEditorIdRef.current = loadKey;
     }
   }, [editingCampaignId, campaigns]);
 
