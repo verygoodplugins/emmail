@@ -54,6 +54,7 @@ export interface SampleDataSummary {
   recipients: number;
   events: number;
   suppressions: number;
+  automations: number;
 }
 
 export interface AutomationStep {
