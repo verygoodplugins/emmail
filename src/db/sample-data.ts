@@ -1,3 +1,5 @@
+import { AutomationRepository } from "./automation-repository";
+
 export interface SampleDataSummary {
   contacts: number;
   lists: number;
@@ -6,6 +8,7 @@ export interface SampleDataSummary {
   recipients: number;
   events: number;
   suppressions: number;
+  automations: number;
 }
 
 const createdAt = "2026-06-16T15:00:00.000Z";
@@ -281,7 +284,8 @@ const sampleSummary: SampleDataSummary = {
   campaigns: sampleCampaigns.length,
   recipients: sampleRecipients.length,
   events: sampleEvents.length,
-  suppressions: sampleSuppressions.length
+  suppressions: sampleSuppressions.length,
+  automations: 1
 };
 
 export async function seedSampleData(db: D1Database): Promise<SampleDataSummary> {
@@ -448,6 +452,8 @@ export async function seedSampleData(db: D1Database): Promise<SampleDataSummary>
     ).bind(suppression.id, suppression.email, suppression.type, suppression.source, suppression.reason, createdAt).run();
   }
 
+  await new AutomationRepository(db).ensureWelcomeSequence();
+
   return sampleSummary;
 }
 
@@ -474,7 +480,8 @@ export async function getSampleDataStatus(db: D1Database): Promise<SampleDataSum
     campaigns: await countByIds(db, "campaigns", "id", ids(sampleCampaigns)),
     recipients: await countByIds(db, "campaign_recipients", "id", ids(sampleRecipients)),
     events: await countByIds(db, "events", "id", ids(sampleEvents)),
-    suppressions: await countSuppressions(db)
+    suppressions: await countSuppressions(db),
+    automations: await countWelcomeSequence(db)
   };
 }
 
@@ -505,6 +512,13 @@ async function countByIds(db: D1Database, table: string, column: string, values:
   const row = await db.prepare(
     `SELECT COUNT(*) AS count FROM ${table} WHERE ${column} IN (${placeholders(values)})`
   ).bind(...values).first<{ count: number }>();
+  return Number(row?.count ?? 0);
+}
+
+async function countWelcomeSequence(db: D1Database): Promise<number> {
+  const row = await db.prepare(
+    "SELECT COUNT(*) AS count FROM automations WHERE slug = ?"
+  ).bind("welcome-sequence").first<{ count: number }>();
   return Number(row?.count ?? 0);
 }
 

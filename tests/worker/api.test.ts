@@ -553,7 +553,8 @@ describe("Worker API", () => {
       campaigns: 2,
       recipients: 6,
       events: 17,
-      suppressions: 2
+      suppressions: 2,
+      automations: 1
     });
 
     const contactsAfterSeed = await new ContactRepository(env.DB).listContacts({ limit: 20, offset: 0 });
@@ -571,7 +572,7 @@ describe("Worker API", () => {
 
     const statusResponse = await handleRequest(new Request("https://mail.example.com/api/sample-data/status", { headers: adminAuth }), env);
     expect(statusResponse.status).toBe(200);
-    await expect(statusResponse.json()).resolves.toMatchObject({ contacts: 8, campaigns: 2, events: 17 });
+    await expect(statusResponse.json()).resolves.toMatchObject({ contacts: 8, campaigns: 2, events: 17, automations: 1 });
 
     const sampleEvents = await handleRequest(
       new Request("https://mail.example.com/api/campaigns/sample_campaign_june/events", { headers: adminAuth }),
@@ -579,6 +580,14 @@ describe("Worker API", () => {
     );
     expect(sampleEvents.status).toBe(200);
     await expect(sampleEvents.json()).resolves.toHaveLength(17);
+
+    const automationsResponse = await handleRequest(new Request("https://mail.example.com/api/automations", { headers: adminAuth }), env);
+    expect(automationsResponse.status).toBe(200);
+    const automations = await automationsResponse.json() as Array<{ slug: string; steps: unknown[] }>;
+    expect(automations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slug: "welcome-sequence", steps: expect.any(Array) })
+    ]));
+    expect(automations.find((row) => row.slug === "welcome-sequence")?.steps).toHaveLength(4);
 
     const clearResponse = await handleRequest(new Request("https://mail.example.com/api/sample-data/clear", {
       method: "POST",
@@ -608,7 +617,8 @@ describe("Worker API", () => {
       campaigns: 2,
       recipients: 6,
       events: 17,
-      suppressions: 2
+      suppressions: 2,
+      automations: 1
     });
   });
 });
