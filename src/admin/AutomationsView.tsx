@@ -254,22 +254,37 @@ export function AutomationsView(props: AutomationsViewProps) {
     if (!draft || draft.enabled) {
       return;
     }
+    const saveForId = draft.id;
+    const saveEpoch = previewEpochRef.current;
     props.onBusyChange(true);
     props.onNotice("");
     try {
       const savedName = draft.name.trim() || "Untitled sequence";
+      // Persist steps first so an invalid draft cannot leave a renamed row behind.
+      let saved = await replaceAutomationSteps(draft.id, draft.steps);
       const current = props.automations.find(
         (automation) => automation.id === draft.id,
       );
       if (!current || current.name !== savedName) {
-        await updateAutomationName(draft.id, savedName);
+        saved = await updateAutomationName(draft.id, savedName);
       }
-      const saved = await replaceAutomationSteps(draft.id, draft.steps);
       await props.onRefresh();
+      if (
+        selectedIdRef.current !== saveForId ||
+        previewEpochRef.current !== saveEpoch
+      ) {
+        return;
+      }
       setDraft(toEditorDraft(saved));
       setDirty(false);
       props.onNotice(`Saved “${saved.name}”`);
     } catch (error) {
+      if (
+        selectedIdRef.current !== saveForId ||
+        previewEpochRef.current !== saveEpoch
+      ) {
+        return;
+      }
       props.onNotice(error instanceof Error ? error.message : "Save failed");
     } finally {
       props.onBusyChange(false);

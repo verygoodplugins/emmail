@@ -229,10 +229,16 @@ export class AutomationRepository {
     assertConsecutiveNonWaitWithinGuard(steps);
 
     const now = nowIso();
+    // Conditional mutations so a concurrent enable cannot leave the sequence
+    // enabled with half-replaced (or empty) steps mid-batch.
     const statements: D1PreparedStatement[] = [
       this.db
-        .prepare("DELETE FROM automation_steps WHERE automation_id = ?")
-        .bind(id),
+        .prepare(
+          `DELETE FROM automation_steps
+           WHERE automation_id = ?
+             AND (SELECT enabled FROM automations WHERE id = ?) = 0`,
+        )
+        .bind(id, id),
     ];
     for (let position = 0; position < steps.length; position += 1) {
       const step = steps[position];
@@ -240,7 +246,8 @@ export class AutomationRepository {
         this.db
           .prepare(
             `INSERT INTO automation_steps (id, automation_id, position, step_type, config_json, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+             SELECT ?, ?, ?, ?, ?, ?
+             WHERE (SELECT enabled FROM automations WHERE id = ?) = 0`,
           )
           .bind(
             createId("stp"),
@@ -249,15 +256,22 @@ export class AutomationRepository {
             step.stepType,
             JSON.stringify(step.config),
             now,
+            id,
           ),
       );
     }
     statements.push(
       this.db
-        .prepare("UPDATE automations SET updated_at = ? WHERE id = ?")
+        .prepare(
+          "UPDATE automations SET updated_at = ? WHERE id = ? AND enabled = 0",
+        )
         .bind(now, id),
     );
-    await this.db.batch(statements);
+    const results = await this.db.batch(statements);
+    const touched = results[results.length - 1]?.meta?.changes ?? 0;
+    if (touched !== 1) {
+      throw new AutomationConflictError();
+    }
     return this.getAutomationSummary(id);
   }
 
@@ -272,13 +286,33 @@ export class AutomationRepository {
         throw new AutomationEmptyStepsError();
       }
       assertConsecutiveNonWaitWithinGuard(steps);
+      const now = nowIso();
+      const result = await this.db
+        .prepare(
+          `UPDATE automations SET enabled = 1, updated_at = ?
+           WHERE id = ? AND enabled = 0
+             AND (SELECT COUNT(*) FROM automation_steps WHERE automation_id = ?) > 0`,
+        )
+        .bind(now, id, id)
+        .run();
+      if ((result.meta?.changes ?? 0) !== 1) {
+        const current = await this.getAutomation(id);
+        if (!current) {
+          return null;
+        }
+        if (current.enabled) {
+          return current;
+        }
+        throw new AutomationEmptyStepsError();
+      }
+      return this.getAutomation(id);
     }
     const now = nowIso();
     await this.db
       .prepare(
-        "UPDATE automations SET enabled = ?, updated_at = ? WHERE id = ?",
+        "UPDATE automations SET enabled = 0, updated_at = ? WHERE id = ?",
       )
-      .bind(enabled ? 1 : 0, now, id)
+      .bind(now, id)
       .run();
     return this.getAutomation(id);
   }
