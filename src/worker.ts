@@ -11,20 +11,9 @@ import {
 import { buildAutomationPreview } from "./email/preview-sequence";
 import { CampaignConflictError, CampaignRepository } from "./db/campaign-repository";
 import { ContactRepository } from "./db/contact-repository";
-import {
-  clearSampleData,
-  getSampleDataStatus,
-  seedSampleData,
-} from "./db/sample-data";
-import {
-  ingestSouthOzarksContactMessage,
-  verifySharedSecret,
-} from "./integrations/southandozarks";
-import {
-  basePathFromAppBaseUrl,
-  rewriteRequestPath,
-  stripBasePath,
-} from "./lib/base-path";
+import { clearSampleData, getSampleDataStatus, seedSampleData } from "./db/sample-data";
+import { ingestSouthOzarksContactMessage, verifySharedSecret } from "./integrations/southandozarks";
+import { basePathFromAppBaseUrl, rewriteRequestPath, stripBasePath } from "./lib/base-path";
 import { previewContactsCsv } from "./lib/csv";
 import { createId, nowIso } from "./lib/ids";
 import { verifyToken } from "./lib/tokens";
@@ -37,15 +26,11 @@ import { processCampaignSend } from "./queue/send";
 import { maybeEnqueueWelcome, processWelcomeSend } from "./queue/welcome";
 import { handleVerifiedResendWebhook } from "./webhooks/resend";
 
-export async function handleRequest(
-  request: Request,
-  env: Env,
-): Promise<Response> {
+export async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const basePath = basePathFromAppBaseUrl(env.APP_BASE_URL);
   const path = stripBasePath(url.pathname, basePath);
-  const assetRequest =
-    path === url.pathname ? request : rewriteRequestPath(request, path);
+  const assetRequest = path === url.pathname ? request : rewriteRequestPath(request, path);
 
   try {
     if (path === "/login") {
@@ -68,14 +53,14 @@ export async function handleRequest(
       const contacts = new ContactRepository(env.DB);
       const imported = await contacts.importContacts(preview.accepted);
       await env.DB.prepare(
-        "INSERT INTO imports (id, status, total_rows, accepted_rows, rejected_rows, created_at) VALUES (?, 'complete', ?, ?, ?, ?)",
+        "INSERT INTO imports (id, status, total_rows, accepted_rows, rejected_rows, created_at) VALUES (?, 'complete', ?, ?, ?, ?)"
       )
         .bind(
           createId("imp"),
           preview.summary.totalRows,
           preview.summary.acceptedRows,
           preview.summary.rejectedRows,
-          nowIso(),
+          nowIso()
         )
         .run();
       return json({ ...preview, ...imported });
@@ -93,21 +78,15 @@ export async function handleRequest(
       return json(await clearSampleData(env.DB));
     }
 
-    if (
-      request.method === "POST" &&
-      path === "/api/integrations/southandozarks/contact-message"
-    ) {
+    if (request.method === "POST" && path === "/api/integrations/southandozarks/contact-message") {
       const authorized = await verifySharedSecret(
         env.EMMAIL_INGEST_SECRET,
-        request.headers.get("x-emmail-ingest-secret"),
+        request.headers.get("x-emmail-ingest-secret")
       );
       if (!authorized) {
         return json({ error: "Unauthorized" }, 401);
       }
-      const result = await ingestSouthOzarksContactMessage(
-        env.DB,
-        await request.json(),
-      );
+      const result = await ingestSouthOzarksContactMessage(env.DB, await request.json());
       // Gate the welcome on welcome_sent (inside maybeEnqueueWelcome), NOT on the
       // ingest `duplicate` flag: a duplicate replay is exactly how a dropped
       // enqueue self-heals, and welcome_sent already caps delivery at one per
@@ -134,39 +113,35 @@ export async function handleRequest(
 
     if (request.method === "POST" && path === "/api/automations") {
       const body = await request.json<{ name: string }>();
-      const automation = await new AutomationRepository(
-        env.DB,
-      ).createAutomation(body.name ?? "");
+      const automation = await new AutomationRepository(env.DB).createAutomation(body.name ?? "");
       return json(automation, 201);
     }
 
     if (request.method === "POST" && path === "/api/automations/preview") {
       const body = await request.json<{ firstName?: string; steps: StepInput[] }>();
-      return json(await buildAutomationPreview({
-        firstName: body.firstName,
-        steps: body.steps ?? []
-      }));
+      return json(
+        await buildAutomationPreview({
+          firstName: body.firstName,
+          steps: body.steps ?? [],
+        })
+      );
     }
 
     if (request.method === "POST" && path === "/api/automations/seed-welcome") {
-      return json(
-        await new AutomationRepository(env.DB).ensureWelcomeSequence(),
-        201,
-      );
+      return json(await new AutomationRepository(env.DB).ensureWelcomeSequence(), 201);
     }
 
     const automationMatch = path.match(/^\/api\/automations\/([^/]+)$/);
     if (request.method === "PATCH" && automationMatch) {
       const body = await request.json<{ name: string }>();
-      const automation = await new AutomationRepository(
-        env.DB,
-      ).updateAutomationName(automationMatch[1], body.name ?? "");
+      const automation = await new AutomationRepository(env.DB).updateAutomationName(
+        automationMatch[1],
+        body.name ?? ""
+      );
       return automation ? json(automation) : json({ error: "Not found" }, 404);
     }
 
-    const automationStepsMatch = path.match(
-      /^\/api\/automations\/([^/]+)\/steps$/,
-    );
+    const automationStepsMatch = path.match(/^\/api\/automations\/([^/]+)\/steps$/);
     if (request.method === "PUT" && automationStepsMatch) {
       const body = await request.json<{ steps: StepInput[]; name?: string }>();
       const automation = await new AutomationRepository(env.DB).replaceSteps(
@@ -175,30 +150,24 @@ export async function handleRequest(
           stepType: step.stepType as AutomationStepType,
           config: step.config,
         })),
-        body.name === undefined ? {} : { name: body.name },
+        body.name === undefined ? {} : { name: body.name }
       );
       return automation ? json(automation) : json({ error: "Not found" }, 404);
     }
 
-    const automationToggleMatch = path.match(
-      /^\/api\/automations\/([^/]+)\/(enable|disable)$/,
-    );
+    const automationToggleMatch = path.match(/^\/api\/automations\/([^/]+)\/(enable|disable)$/);
     if (request.method === "POST" && automationToggleMatch) {
       const automation = await new AutomationRepository(env.DB).setEnabled(
         automationToggleMatch[1],
-        automationToggleMatch[2] === "enable",
+        automationToggleMatch[2] === "enable"
       );
       return automation ? json(automation) : json({ error: "Not found" }, 404);
     }
 
-    const automationEnrollmentsMatch = path.match(
-      /^\/api\/automations\/([^/]+)\/enrollments$/,
-    );
+    const automationEnrollmentsMatch = path.match(/^\/api\/automations\/([^/]+)\/enrollments$/);
     if (request.method === "GET" && automationEnrollmentsMatch) {
       return json(
-        await new AutomationRepository(env.DB).listEnrollments(
-          automationEnrollmentsMatch[1],
-        ),
+        await new AutomationRepository(env.DB).listEnrollments(automationEnrollmentsMatch[1])
       );
     }
 
@@ -208,7 +177,7 @@ export async function handleRequest(
         await contacts.listContacts({
           limit: Number(url.searchParams.get("limit") ?? 50),
           offset: Number(url.searchParams.get("offset") ?? 0),
-        }),
+        })
       );
     }
 
@@ -217,12 +186,7 @@ export async function handleRequest(
     }
 
     if (request.method === "POST" && path === "/api/lists") {
-      return createName(
-        env.DB,
-        "lists",
-        "lst",
-        await request.json<{ name: string }>(),
-      );
+      return createName(env.DB, "lists", "lst", await request.json<{ name: string }>());
     }
 
     if (request.method === "GET" && path === "/api/tags") {
@@ -230,12 +194,7 @@ export async function handleRequest(
     }
 
     if (request.method === "POST" && path === "/api/tags") {
-      return createName(
-        env.DB,
-        "tags",
-        "tag",
-        await request.json<{ name: string }>(),
-      );
+      return createName(env.DB, "tags", "tag", await request.json<{ name: string }>());
     }
 
     if (request.method === "GET" && path === "/api/campaigns") {
@@ -275,10 +234,7 @@ export async function handleRequest(
       // Enqueue whenever recipients are pending, not just when the snapshot
       // created new ones — re-posting /send resumes a campaign whose queue
       // message was lost.
-      const pendingRecipients = await campaigns.countRecipientsByStatus(
-        campaignId,
-        "pending",
-      );
+      const pendingRecipients = await campaigns.countRecipientsByStatus(campaignId, "pending");
       const queuedJobs = pendingRecipients > 0 ? 1 : 0;
       if (queuedJobs) {
         await env.SEND_QUEUE.send({ campaignId, limit: 100 });
@@ -288,25 +244,17 @@ export async function handleRequest(
 
     const campaignStatsMatch = path.match(/^\/api\/campaigns\/([^/]+)\/stats$/);
     if (request.method === "GET" && campaignStatsMatch) {
-      return json(
-        await new CampaignRepository(env.DB).getCampaignStats(
-          campaignStatsMatch[1],
-        ),
-      );
+      return json(await new CampaignRepository(env.DB).getCampaignStats(campaignStatsMatch[1]));
     }
 
-    const campaignEventsMatch = path.match(
-      /^\/api\/campaigns\/([^/]+)\/events$/,
-    );
+    const campaignEventsMatch = path.match(/^\/api\/campaigns\/([^/]+)\/events$/);
     if (request.method === "GET" && campaignEventsMatch) {
       return json(await campaignEvents(env.DB, campaignEventsMatch[1]));
     }
 
     const campaignGetMatch = path.match(/^\/api\/campaigns\/([^/]+)$/);
     if (request.method === "GET" && campaignGetMatch) {
-      const campaign = await new CampaignRepository(env.DB).getCampaign(
-        campaignGetMatch[1],
-      );
+      const campaign = await new CampaignRepository(env.DB).getCampaign(campaignGetMatch[1]);
       return campaign ? json(campaign) : json({ error: "Not found" }, 404);
     }
     if (request.method === "PATCH" && campaignGetMatch) {
@@ -317,21 +265,18 @@ export async function handleRequest(
         markdownBody: string;
         audience: { listIds?: string[]; tagIds?: string[] };
       }>();
-      const campaign = await new CampaignRepository(env.DB).updateCampaign(
-        campaignGetMatch[1],
-        {
-          name: body.name,
-          subject: body.subject,
-          previewText: body.previewText ?? "",
-          markdownBody: body.markdownBody,
-          fromName: env.DEFAULT_FROM_NAME,
-          fromEmail: env.DEFAULT_FROM_EMAIL,
-          audience: {
-            listIds: body.audience?.listIds ?? [],
-            tagIds: body.audience?.tagIds ?? []
-          }
-        }
-      );
+      const campaign = await new CampaignRepository(env.DB).updateCampaign(campaignGetMatch[1], {
+        name: body.name,
+        subject: body.subject,
+        previewText: body.previewText ?? "",
+        markdownBody: body.markdownBody,
+        fromName: env.DEFAULT_FROM_NAME,
+        fromEmail: env.DEFAULT_FROM_EMAIL,
+        audience: {
+          listIds: body.audience?.listIds ?? [],
+          tagIds: body.audience?.tagIds ?? [],
+        },
+      });
       return campaign ? json(campaign) : json({ error: "Not found" }, 404);
     }
 
@@ -345,20 +290,11 @@ export async function handleRequest(
       return handleClick(env, clickMatch[1], clickMatch[2], clickMatch[3]);
     }
 
-    const contactUnsubscribeMatch = path.match(
-      /^\/unsubscribe\/c\/([^/]+)\/([^/]+)$/,
-    );
-    if (
-      (request.method === "GET" || request.method === "POST") &&
-      contactUnsubscribeMatch
-    ) {
+    const contactUnsubscribeMatch = path.match(/^\/unsubscribe\/c\/([^/]+)\/([^/]+)$/);
+    if ((request.method === "GET" || request.method === "POST") && contactUnsubscribeMatch) {
       // POST supports RFC 8058 one-click unsubscribe (the List-Unsubscribe-Post
       // header advertised on welcome mail); GET supports a human clicking it.
-      return handleContactUnsubscribe(
-        env,
-        contactUnsubscribeMatch[1],
-        contactUnsubscribeMatch[2],
-      );
+      return handleContactUnsubscribe(env, contactUnsubscribeMatch[1], contactUnsubscribeMatch[2]);
     }
 
     const unsubscribeMatch = path.match(/^\/unsubscribe\/([^/]+)\/([^/]+)$/);
@@ -386,10 +322,7 @@ export async function handleRequest(
     if (error instanceof AutomationValidationError) {
       return json({ error: error.message }, 400);
     }
-    return json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      500,
-    );
+    return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
   }
 }
 
@@ -407,7 +340,7 @@ export default {
           text: string;
           headers: Record<string, string>;
         },
-        options: { idempotencyKey: string },
+        options: { idempotencyKey: string }
       ) => {
         const response = await resend.emails.send(payload, {
           idempotencyKey: options.idempotencyKey,
@@ -462,11 +395,7 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-async function requiresAdminAuth(
-  request: Request,
-  env: Env,
-  path: string,
-): Promise<boolean> {
+async function requiresAdminAuth(request: Request, env: Env, path: string): Promise<boolean> {
   if (isPublicPath(request.method, path)) {
     return false;
   }
@@ -481,8 +410,7 @@ async function requiresAdminAuth(
 function isPublicPath(method: string, path: string): boolean {
   return (
     path === "/login" ||
-    (method === "POST" &&
-      path === "/api/integrations/southandozarks/contact-message") ||
+    (method === "POST" && path === "/api/integrations/southandozarks/contact-message") ||
     (method === "POST" && path === "/webhooks/resend") ||
     /^\/t\/open\/[^/]+\/[^/]+\/[^/]+\.gif$/.test(path) ||
     /^\/t\/click\/[^/]+\/[^/]+\/[^/]+$/.test(path) ||
@@ -491,22 +419,13 @@ function isPublicPath(method: string, path: string): boolean {
   );
 }
 
-async function hasAdminAccess(
-  request: Request,
-  token: string,
-): Promise<boolean> {
+async function hasAdminAccess(request: Request, token: string): Promise<boolean> {
   const authorization = request.headers.get("authorization") ?? "";
   if (authorization.toLowerCase().startsWith("bearer ")) {
-    return verifySharedSecret(
-      token,
-      authorization.slice("bearer ".length).trim(),
-    );
+    return verifySharedSecret(token, authorization.slice("bearer ".length).trim());
   }
 
-  const cookieValue = readCookie(
-    request.headers.get("cookie") ?? "",
-    "emmail_admin",
-  );
+  const cookieValue = readCookie(request.headers.get("cookie") ?? "", "emmail_admin");
   if (!cookieValue) {
     return false;
   }
@@ -514,15 +433,11 @@ async function hasAdminAccess(
   return verifySharedSecret(await adminSessionValue(token), cookieValue);
 }
 
-async function handleAdminLogin(
-  request: Request,
-  env: Env,
-  basePath: string,
-): Promise<Response> {
+async function handleAdminLogin(request: Request, env: Env, basePath: string): Promise<Response> {
   if (!env.EMMAIL_ADMIN_TOKEN) {
     return adminLoginPage(
       basePath,
-      "Admin access is disabled: EMMAIL_ADMIN_TOKEN is not configured.",
+      "Admin access is disabled: EMMAIL_ADMIN_TOKEN is not configured."
     );
   }
 
@@ -598,18 +513,16 @@ function adminLoginPage(basePath: string, message = ""): Response {
         "content-type": "text/html; charset=utf-8",
         "cache-control": "no-store",
       },
-    },
+    }
   );
 }
 
 async function adminSessionValue(token: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(`emmail-admin:${token}`),
+    new TextEncoder().encode(`emmail-admin:${token}`)
   );
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function readCookie(header: string, name: string): string {
@@ -636,11 +549,9 @@ function escapeHtml(value: string): string {
 
 async function names(
   db: D1Database,
-  table: "lists" | "tags",
+  table: "lists" | "tags"
 ): Promise<Array<{ id: string; name: string }>> {
-  const result = await db
-    .prepare(`SELECT id, name FROM ${table} ORDER BY name ASC`)
-    .all();
+  const result = await db.prepare(`SELECT id, name FROM ${table} ORDER BY name ASC`).all();
   return (result.results ?? []) as Array<{ id: string; name: string }>;
 }
 
@@ -648,7 +559,7 @@ async function createName(
   db: D1Database,
   table: "lists" | "tags",
   prefix: string,
-  body: { name: string },
+  body: { name: string }
 ): Promise<Response> {
   const existing = await db
     .prepare(`SELECT id, name FROM ${table} WHERE name = ?`)
@@ -665,13 +576,10 @@ async function createName(
   return json(record, 201);
 }
 
-async function campaignEvents(
-  db: D1Database,
-  campaignId: string,
-): Promise<unknown[]> {
+async function campaignEvents(db: D1Database, campaignId: string): Promise<unknown[]> {
   const result = await db
     .prepare(
-      "SELECT id, type, recipient_id, link_id, url, created_at FROM events WHERE campaign_id = ? ORDER BY created_at DESC LIMIT 200",
+      "SELECT id, type, recipient_id, link_id, url, created_at FROM events WHERE campaign_id = ? ORDER BY created_at DESC LIMIT 200"
     )
     .bind(campaignId)
     .all();
@@ -682,45 +590,29 @@ async function handleOpen(
   env: Env,
   recipientId: string,
   campaignId: string,
-  token: string,
+  token: string
 ): Promise<Response> {
-  const ok = await verifyToken(
-    env.TRACKING_SECRET,
-    "open",
-    [recipientId, campaignId],
-    token,
-  );
+  const ok = await verifyToken(env.TRACKING_SECRET, "open", [recipientId, campaignId], token);
   if (!ok) {
     return new Response(null, { status: 404 });
   }
-  await new CampaignRepository(env.DB).markRecipientEvent(
-    recipientId,
-    "opened",
-  );
+  await new CampaignRepository(env.DB).markRecipientEvent(recipientId, "opened");
   const gif = transparentGif();
-  return new Response(
-    new Blob([gif as unknown as BlobPart], { type: "image/gif" }),
-    {
-      headers: {
-        "content-type": "image/gif",
-        "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
-      },
+  return new Response(new Blob([gif as unknown as BlobPart], { type: "image/gif" }), {
+    headers: {
+      "content-type": "image/gif",
+      "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
     },
-  );
+  });
 }
 
 async function handleClick(
   env: Env,
   recipientId: string,
   linkId: string,
-  token: string,
+  token: string
 ): Promise<Response> {
-  const ok = await verifyToken(
-    env.TRACKING_SECRET,
-    "click",
-    [recipientId, linkId],
-    token,
-  );
+  const ok = await verifyToken(env.TRACKING_SECRET, "click", [recipientId, linkId], token);
   if (!ok) {
     return new Response(null, { status: 404 });
   }
@@ -733,17 +625,8 @@ async function handleClick(
   return Response.redirect(link.url, 302);
 }
 
-async function handleUnsubscribe(
-  env: Env,
-  recipientId: string,
-  token: string,
-): Promise<Response> {
-  const ok = await verifyToken(
-    env.TRACKING_SECRET,
-    "unsubscribe",
-    [recipientId],
-    token,
-  );
+async function handleUnsubscribe(env: Env, recipientId: string, token: string): Promise<Response> {
+  const ok = await verifyToken(env.TRACKING_SECRET, "unsubscribe", [recipientId], token);
   if (!ok) {
     return new Response(null, { status: 404 });
   }
@@ -752,11 +635,7 @@ async function handleUnsubscribe(
   if (!recipient) {
     return new Response(null, { status: 404 });
   }
-  await new ContactRepository(env.DB).suppressEmail(
-    recipient.email,
-    "unsubscribe",
-    "one-click",
-  );
+  await new ContactRepository(env.DB).suppressEmail(recipient.email, "unsubscribe", "one-click");
   await campaigns.recordEvent({ recipientId, type: "unsubscribe" });
   return unsubscribedPage();
 }
@@ -767,14 +646,9 @@ async function handleUnsubscribe(
 async function handleContactUnsubscribe(
   env: Env,
   contactId: string,
-  token: string,
+  token: string
 ): Promise<Response> {
-  const ok = await verifyToken(
-    env.TRACKING_SECRET,
-    "unsubscribe-contact",
-    [contactId],
-    token,
-  );
+  const ok = await verifyToken(env.TRACKING_SECRET, "unsubscribe-contact", [contactId], token);
   if (!ok) {
     return new Response(null, { status: 404 });
   }
@@ -799,14 +673,11 @@ function unsubscribedPage(): Response {
         "content-type": "text/html; charset=utf-8",
         "cache-control": "no-store",
       },
-    },
+    }
   );
 }
 
-async function handleResendWebhook(
-  request: Request,
-  env: Env,
-): Promise<Response> {
+async function handleResendWebhook(request: Request, env: Env): Promise<Response> {
   if (
     !request.headers.get("svix-id") ||
     !request.headers.get("svix-timestamp") ||
@@ -832,7 +703,7 @@ async function handleResendWebhook(
             signature: headers.get("svix-signature") ?? "",
           },
           webhookSecret: secret,
-        }),
+        })
     );
     return json({ ok: true });
   } catch {
@@ -843,6 +714,6 @@ async function handleResendWebhook(
 function transparentGif(): Uint8Array {
   return Uint8Array.from(
     atob("R0lGODlhAQABAPAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=="),
-    (char) => char.charCodeAt(0),
+    (char) => char.charCodeAt(0)
   );
 }

@@ -16,6 +16,8 @@ describe("email helpers", () => {
   it("skips contacts with explicit suppressions or unsubscribed/bounced status", () => {
     expect(shouldSkipSuppressed({ email: "a@example.com", status: "subscribed" }, [])).toBe(false);
     expect(shouldSkipSuppressed({ email: "a@example.com", status: "unsubscribed" }, [])).toBe(true);
-    expect(shouldSkipSuppressed({ email: "a@example.com", status: "subscribed" }, ["a@example.com"])).toBe(true);
+    expect(
+      shouldSkipSuppressed({ email: "a@example.com", status: "subscribed" }, ["a@example.com"])
+    ).toBe(true);
   });
 });

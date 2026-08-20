@@ -4,7 +4,11 @@ import { ContactRepository } from "../db/contact-repository";
 import { renderCampaignEmail } from "../email/render";
 import { WELCOME_PREVIEW, WELCOME_SUBJECT, welcomeMarkdown } from "../email/welcome";
 import { formatFromHeader } from "../lib/email";
-import { isIdempotencyConflict, isRetryableResendError, stringifyResendError } from "../lib/resend-errors";
+import {
+  isIdempotencyConflict,
+  isRetryableResendError,
+  stringifyResendError,
+} from "../lib/resend-errors";
 import { signToken } from "../lib/tokens";
 
 export interface ResendEmailMessage {
@@ -79,13 +83,21 @@ export async function processWelcomeSend(
     return { status: "skipped", contactId, reason: "contact-not-found" };
   }
   if (contact.status !== "subscribed") {
-    await campaigns.recordEvent({ contactId, type: "welcome_skipped", metadata: { reason: `status:${contact.status}` } });
+    await campaigns.recordEvent({
+      contactId,
+      type: "welcome_skipped",
+      metadata: { reason: `status:${contact.status}` },
+    });
     return { status: "skipped", contactId, reason: `status:${contact.status}` };
   }
   // status can be stale (ingest re-subscribes on re-submit), so also consult the
   // suppressions table before mailing — an opted-out address must not get this.
   if (await contacts.isSuppressed(contact.email)) {
-    await campaigns.recordEvent({ contactId, type: "welcome_skipped", metadata: { reason: "suppressed" } });
+    await campaigns.recordEvent({
+      contactId,
+      type: "welcome_skipped",
+      metadata: { reason: "suppressed" },
+    });
     return { status: "skipped", contactId, reason: "suppressed" };
   }
   // Redelivery after a successful send.
@@ -95,11 +107,16 @@ export async function processWelcomeSend(
 
   const { html, text } = await renderCampaignEmail({
     previewText: WELCOME_PREVIEW,
-    markdownBody: welcomeMarkdown(contact.first_name)
+    markdownBody: welcomeMarkdown(contact.first_name),
   });
 
   if (env.EMMAIL_SEND_MODE !== "live") {
-    await campaigns.recordEvent({ contactId, type: "welcome_sent", providerEventId: "dry-run", metadata: { mode: "dry-run" } });
+    await campaigns.recordEvent({
+      contactId,
+      type: "welcome_sent",
+      providerEventId: "dry-run",
+      metadata: { mode: "dry-run" },
+    });
     return { status: "dry-run", contactId };
   }
 
@@ -113,8 +130,8 @@ export async function processWelcomeSend(
       text: `${text}\n\nUnsubscribe: ${unsubscribeUrl}`,
       headers: {
         "List-Unsubscribe": `<${unsubscribeUrl}>`,
-        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"
-      }
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      },
     },
     { idempotencyKey: `welcome/${contactId}` }
   );
@@ -125,7 +142,12 @@ export async function processWelcomeSend(
     }
     if (isIdempotencyConflict(result.error)) {
       // The welcome already went out under this key; record and move on.
-      await campaigns.recordEvent({ contactId, type: "welcome_sent", providerEventId: "conflict", metadata: { mode: "conflict" } });
+      await campaigns.recordEvent({
+        contactId,
+        type: "welcome_sent",
+        providerEventId: "conflict",
+        metadata: { mode: "conflict" },
+      });
       return { status: "conflict", contactId };
     }
     const error = stringifyResendError(result.error);
@@ -133,7 +155,12 @@ export async function processWelcomeSend(
     return { status: "failed", contactId, reason: error };
   }
 
-  await campaigns.recordEvent({ contactId, type: "welcome_sent", providerEventId: result.data.id, metadata: { mode: "live" } });
+  await campaigns.recordEvent({
+    contactId,
+    type: "welcome_sent",
+    providerEventId: result.data.id,
+    metadata: { mode: "live" },
+  });
   return { status: "sent", contactId, resendEmailId: result.data.id };
 }
 

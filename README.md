@@ -243,3 +243,18 @@ Helpers: [`tests/helpers/mail-harness.ts`](tests/helpers/mail-harness.ts).
 - `GET /api/automations/:id/enrollments`
 
 Public: `/t/open/...gif`, `/t/click/...`, `/unsubscribe/...`, `POST /webhooks/resend`.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Coding agents: start at [AGENTS.md](AGENTS.md). Security reports go through [GitHub Security Advisories](.github/SECURITY.md), not public issues.
+
+## Support
+
+For issues, questions, or suggestions:
+
+- [Open an issue on GitHub](https://github.com/verygoodplugins/emmail/issues)
+- [Contact Very Good Plugins](https://verygoodplugins.com/contact/?utm_source=github)
+
+---
+
+Built with 🧡 by [Very Good Plugins](https://verygoodplugins.com/?utm_source=github)

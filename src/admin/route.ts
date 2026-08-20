@@ -6,13 +6,7 @@ export interface AppRoute {
   automationId: string;
 }
 
-const TABS = new Set<Tab>([
-  "contacts",
-  "imports",
-  "campaigns",
-  "automations",
-  "events",
-]);
+const TABS = new Set<Tab>(["contacts", "imports", "campaigns", "automations", "events"]);
 
 export function parseHash(hash: string): AppRoute {
   const raw = hash.startsWith("#") ? hash.slice(1) : hash;
@@ -58,19 +52,13 @@ function decodeHashPart(part: string): string {
 
 export function routeHash(route: AppRoute): string {
   if (route.tab === "events") {
-    return route.campaignId
-      ? campaignEventsHash(route.campaignId)
-      : "#/events";
+    return route.campaignId ? campaignEventsHash(route.campaignId) : "#/events";
   }
   if (route.tab === "campaigns") {
-    return route.campaignId
-      ? campaignEditorHash(route.campaignId)
-      : "#/campaigns";
+    return route.campaignId ? campaignEditorHash(route.campaignId) : "#/campaigns";
   }
   if (route.tab === "automations") {
-    return route.automationId
-      ? automationEditorHash(route.automationId)
-      : "#/automations";
+    return route.automationId ? automationEditorHash(route.automationId) : "#/automations";
   }
   return `#/${route.tab}`;
 }

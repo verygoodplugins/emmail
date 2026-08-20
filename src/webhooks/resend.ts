@@ -65,18 +65,30 @@ async function handleWelcomeWebhookEvent(
   }
 
   if (event.type === "email.delivered") {
-    await campaigns.recordEvent({ contactId: welcome.contactId, type: "welcome_delivered", providerEventId: providerId });
+    await campaigns.recordEvent({
+      contactId: welcome.contactId,
+      type: "welcome_delivered",
+      providerEventId: providerId,
+    });
     return;
   }
 
   if (event.type === "email.bounced") {
     await contacts.suppressEmail(welcome.email, "bounce", "resend-webhook", providerId);
-    await campaigns.recordEvent({ contactId: welcome.contactId, type: "welcome_bounced", providerEventId: providerId });
+    await campaigns.recordEvent({
+      contactId: welcome.contactId,
+      type: "welcome_bounced",
+      providerEventId: providerId,
+    });
     return;
   }
 
   if (event.type === "email.complained") {
     await contacts.suppressEmail(welcome.email, "complaint", "resend-webhook", providerId);
-    await campaigns.recordEvent({ contactId: welcome.contactId, type: "welcome_complained", providerEventId: providerId });
+    await campaigns.recordEvent({
+      contactId: welcome.contactId,
+      type: "welcome_complained",
+      providerEventId: providerId,
+    });
   }
 }

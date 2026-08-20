@@ -2,8 +2,20 @@
   "name": "emmail",
   "version": "0.1.0",
   "private": true,
+  "description": "Single-tenant email marketing on Cloudflare Workers + Resend",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/verygoodplugins/emmail.git"
+  },
+  "bugs": {
+    "url": "https://github.com/verygoodplugins/emmail/issues"
+  },
+  "homepage": "https://github.com/verygoodplugins/emmail#readme",
   "scripts": {
     "dev": "vite",
     "dev:setup": "npm run db:migrate:local",
@@ -17,6 +29,9 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:ingest": "vitest run tests/worker/ingest-automation.test.ts",
+    "format": "prettier --write src/ tests/",
+    "format:check": "prettier --check src/ tests/",
+    "lint": "prettier --check src/ tests/",
     "sample:seed": "curl -fsS -X POST http://127.0.0.1:8787/api/sample-data/seed",
     "sample:clear": "curl -fsS -X POST http://127.0.0.1:8787/api/sample-data/clear",
     "deploy": "npm run build && wrangler deploy"
@@ -31,19 +46,20 @@
     "resend": "^6.9.2"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260613.0",
+    "@cloudflare/workers-types": "^5.20260820.1",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.1",
     "@types/sql.js": "^1.4.9",
     "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^9.2.0",
     "jsdom": "^25.0.1",
     "playwright-core": "^1.61.0",
+    "prettier": "^3.5.3",
     "sql.js": "^1.12.0",
     "typescript": "^5.8.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.9",
-    "wrangler": "^4.20.0",
-    "concurrently": "^9.2.0"
+    "wrangler": "^4.124.0"
   },
   "overrides": {
     "esbuild": "^0.28.1",

@@ -22,9 +22,12 @@ export function parseContactsCsv(csv: string): Record<string, string>[] {
   }
 
   const headers = matrix[0].map(canonicalHeader);
-  return matrix.slice(1)
+  return matrix
+    .slice(1)
     .filter((row) => row.some((cell) => cell.trim() !== ""))
-    .map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index]?.trim() ?? ""])));
+    .map((row) =>
+      Object.fromEntries(headers.map((header, index) => [header, row[index]?.trim() ?? ""]))
+    );
 }
 
 export function previewContactsCsv(csv: string): CsvPreview {
@@ -56,7 +59,7 @@ export function previewContactsCsv(csv: string): CsvPreview {
       lastName,
       status: normalizeStatus(row.status),
       lists: splitMultiValue(row.lists || row.list || ""),
-      tags: splitMultiValue(row.tags || row.tag || "")
+      tags: splitMultiValue(row.tags || row.tag || ""),
     });
   });
 
@@ -66,8 +69,8 @@ export function previewContactsCsv(csv: string): CsvPreview {
     summary: {
       totalRows: rows.length,
       acceptedRows: accepted.length,
-      rejectedRows: rejected.length
-    }
+      rejectedRows: rejected.length,
+    },
   };
 }
 
@@ -117,7 +120,11 @@ function parseCsvMatrix(csv: string): string[][] {
 }
 
 function canonicalHeader(header: string): string {
-  return header.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return header
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function normalizeStatus(status: string): ImportedContact["status"] {
@@ -128,5 +135,8 @@ function normalizeStatus(status: string): ImportedContact["status"] {
 }
 
 function splitMultiValue(value: string): string[] {
-  return value.split(";").map((entry) => entry.trim()).filter(Boolean);
+  return value
+    .split(";")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }

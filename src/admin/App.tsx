@@ -48,15 +48,13 @@ import type {
   CsvPreview,
 } from "./types";
 
-const seedCsv =
-  "email,name,lists,tags\nada@example.com,Ada Lovelace,Newsletter,vip";
+const seedCsv = "email,name,lists,tags\nada@example.com,Ada Lovelace,Newsletter,vip";
 
 const emptyDraft = {
   name: "June update",
   subject: "June update",
   previewText: "A short note from the list",
-  markdownBody:
-    "Hello **friends**,\n\nRead the latest update at [the site](https://example.com).",
+  markdownBody: "Hello **friends**,\n\nRead the latest update at [the site](https://example.com).",
   lists: "Newsletter",
   tags: "",
 };
@@ -71,18 +69,14 @@ export function App() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [automations, setAutomations] = useState<AutomationSummary[]>([]);
   const [events, setEvents] = useState<CampaignEvent[]>([]);
-  const [statsByCampaign, setStatsByCampaign] = useState<
-    Record<string, CampaignStats>
-  >({});
-  const [selectedCampaignId, setSelectedCampaignId] = useState(
-    () => currentRoute().campaignId,
-  );
+  const [statsByCampaign, setStatsByCampaign] = useState<Record<string, CampaignStats>>({});
+  const [selectedCampaignId, setSelectedCampaignId] = useState(() => currentRoute().campaignId);
   const [editingCampaignId, setEditingCampaignId] = useState(() => {
     const route = currentRoute();
     return route.tab === "campaigns" ? route.campaignId : "";
   });
   const [selectedAutomationId, setSelectedAutomationId] = useState(
-    () => currentRoute().automationId,
+    () => currentRoute().automationId
   );
   const [csv, setCsv] = useState(seedCsv);
   const [preview, setPreview] = useState<CsvPreview | null>(null);
@@ -117,17 +111,14 @@ export function App() {
     if (!dirty) {
       return true;
     }
-    const leavingAutomations =
-      current.tab === "automations" && next.tab !== "automations";
+    const leavingAutomations = current.tab === "automations" && next.tab !== "automations";
     const switchingSequence =
       current.tab === "automations" &&
       next.tab === "automations" &&
       next.automationId !== current.automationId;
     if (
       (leavingAutomations || switchingSequence) &&
-      !window.confirm(
-        "You have unsaved sequence changes. Leave Automations and discard them?",
-      )
+      !window.confirm("You have unsaved sequence changes. Leave Automations and discard them?")
     ) {
       return false;
     }
@@ -162,7 +153,7 @@ export function App() {
       history.replaceState(
         null,
         "",
-        `${window.location.pathname}${window.location.search}${routeHash(route)}`,
+        `${window.location.pathname}${window.location.search}${routeHash(route)}`
       );
     }
     const onPop = () => {
@@ -172,7 +163,7 @@ export function App() {
         history.replaceState(
           null,
           "",
-          `${window.location.pathname}${window.location.search}${routeHash(prev)}`,
+          `${window.location.pathname}${window.location.search}${routeHash(prev)}`
         );
         return;
       }
@@ -206,8 +197,8 @@ export function App() {
       campaigns.map((campaign) =>
         getCampaignStats(campaign.id)
           .then((row) => [campaign.id, row] as const)
-          .catch(() => [campaign.id, null] as const),
-      ),
+          .catch(() => [campaign.id, null] as const)
+      )
     ).then((entries) => {
       if (cancelled) {
         return;
@@ -261,20 +252,15 @@ export function App() {
           campaignId: "",
           automationId: firstId,
         },
-        true,
+        true
       );
     }
   }, [tab, automations, selectedAutomationId]);
 
   const selectedCampaign =
-    campaigns.find((campaign) => campaign.id === selectedCampaignId) ??
-    campaigns[0];
-  const stats = selectedCampaignId
-    ? (statsByCampaign[selectedCampaignId] ?? null)
-    : null;
-  const editingCampaign = campaigns.find(
-    (campaign) => campaign.id === editingCampaignId,
-  );
+    campaigns.find((campaign) => campaign.id === selectedCampaignId) ?? campaigns[0];
+  const stats = selectedCampaignId ? (statsByCampaign[selectedCampaignId] ?? null) : null;
+  const editingCampaign = campaigns.find((campaign) => campaign.id === editingCampaignId);
 
   async function refresh() {
     const [contactRows, campaignRows, automationResult] = await Promise.all([
@@ -282,7 +268,7 @@ export function App() {
       listCampaigns(),
       listAutomations().then(
         (rows) => ({ ok: true as const, rows }),
-        () => ({ ok: false as const }),
+        () => ({ ok: false as const })
       ),
     ]);
     setContacts(contactRows);
@@ -291,8 +277,7 @@ export function App() {
       setAutomations(automationResult.rows);
     }
     const nextCampaignId =
-      selectedCampaignId &&
-      campaignRows.some((campaign) => campaign.id === selectedCampaignId)
+      selectedCampaignId && campaignRows.some((campaign) => campaign.id === selectedCampaignId)
         ? selectedCampaignId
         : (campaignRows[0]?.id ?? "");
     setSelectedCampaignId(nextCampaignId);
@@ -376,7 +361,7 @@ export function App() {
       setNotice(
         result.automations
           ? `${result.contacts} sample contacts loaded · ${result.automations} automation`
-          : `${result.contacts} sample contacts loaded`,
+          : `${result.contacts} sample contacts loaded`
       );
       await refresh();
     } finally {
@@ -405,13 +390,7 @@ export function App() {
   }
 
   function onNavClick(event: React.MouseEvent<HTMLAnchorElement>, next: Tab) {
-    if (
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey ||
-      event.button !== 0
-    ) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
       return;
     }
     event.preventDefault();
@@ -489,8 +468,7 @@ export function App() {
           <div>
             <h1>{titleFor(tab)}</h1>
             <span className="meta-line">
-              {contacts.length} contacts · {campaigns.length} broadcasts ·{" "}
-              {automations.length}{" "}
+              {contacts.length} contacts · {campaigns.length} broadcasts · {automations.length}{" "}
               {automations.length === 1 ? "automation" : "automations"}
             </span>
           </div>
@@ -505,19 +483,11 @@ export function App() {
               <Database size={17} />
               Load sample data
             </button>
-            <button
-              className="danger"
-              onClick={() => void runClearSampleData()}
-              disabled={busy}
-            >
+            <button className="danger" onClick={() => void runClearSampleData()} disabled={busy}>
               <Trash2 size={17} />
               Clear sample data
             </button>
-            <button
-              className="icon-button"
-              aria-label="Refresh"
-              onClick={() => void refresh()}
-            >
+            <button className="icon-button" aria-label="Refresh" onClick={() => void refresh()}>
               <RefreshCw size={17} />
             </button>
             {tab === "automations" ? (
@@ -530,10 +500,7 @@ export function App() {
                 New sequence
               </button>
             ) : (
-              <button
-                className="primary"
-                onClick={() => requestTab("campaigns")}
-              >
+              <button className="primary" onClick={() => requestTab("campaigns")}>
                 <MailPlus size={17} />
                 New broadcast
               </button>
@@ -638,11 +605,7 @@ function NavButton({
   onClick: (event: React.MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
-    <a
-      className={`nav-button ${active ? "active" : ""}`}
-      href={href}
-      onClick={onClick}
-    >
+    <a className={`nav-button ${active ? "active" : ""}`} href={href} onClick={onClick}>
       {icon}
       <span>{label}</span>
       {active ? <ChevronRight size={16} /> : null}
@@ -672,11 +635,7 @@ function ContactsView({ contacts }: { contacts: ContactRow[] }) {
             {contacts.map((contact) => (
               <tr key={contact.id}>
                 <td>{contact.email}</td>
-                <td>
-                  {[contact.firstName, contact.lastName]
-                    .filter(Boolean)
-                    .join(" ")}
-                </td>
+                <td>{[contact.firstName, contact.lastName].filter(Boolean).join(" ")}</td>
                 <td>
                   <StatusLabel value={contact.status} />
                 </td>
@@ -715,11 +674,7 @@ function ImportView(props: {
           <button onClick={props.onPreview} disabled={props.busy}>
             Preview
           </button>
-          <button
-            className="primary"
-            onClick={props.onCommit}
-            disabled={props.busy}
-          >
+          <button className="primary" onClick={props.onCommit} disabled={props.busy}>
             Commit import
           </button>
         </div>
@@ -734,15 +689,8 @@ function ImportView(props: {
           )}
         </div>
         <div className="metric-row">
-          <Metric
-            label="Accepted"
-            value={props.preview?.summary.acceptedRows ?? 0}
-          />
-          <Metric
-            label="Rejected"
-            value={props.preview?.summary.rejectedRows ?? 0}
-            tone="coral"
-          />
+          <Metric label="Accepted" value={props.preview?.summary.acceptedRows ?? 0} />
+          <Metric label="Rejected" value={props.preview?.summary.rejectedRows ?? 0} tone="coral" />
         </div>
         <div className="reject-list">
           {(props.preview?.rejected ?? []).map((row) => (
@@ -804,10 +752,7 @@ function CampaignView(props: {
               className={`campaign-row${campaign.id === props.editingCampaignId ? " selected" : ""}`}
               key={campaign.id}
             >
-              <a
-                className="campaign-row-main"
-                href={campaignEditorHash(campaign.id)}
-              >
+              <a className="campaign-row-main" href={campaignEditorHash(campaign.id)}>
                 <strong>{campaign.name}</strong>
                 <span>{campaign.subject}</span>
               </a>
@@ -833,11 +778,7 @@ function CampaignView(props: {
       </div>
       <div className={`panel campaigns-editor${editing ? " is-editing" : ""}`}>
         <div className="panel-head">
-          <h2>
-            {editing
-              ? (props.editingCampaign?.name ?? "Broadcast")
-              : "New broadcast"}
-          </h2>
+          <h2>{editing ? (props.editingCampaign?.name ?? "Broadcast") : "New broadcast"}</h2>
           <MailPlus size={18} />
         </div>
         <div className="form-grid">
@@ -913,11 +854,7 @@ function CampaignView(props: {
               )}
             </>
           ) : (
-            <button
-              className="primary"
-              onClick={props.onCreate}
-              disabled={props.busy}
-            >
+            <button className="primary" onClick={props.onCreate} disabled={props.busy}>
               <MailPlus size={17} />
               Save draft
             </button>
@@ -952,8 +889,8 @@ function CampaignEventsSummary({
         <span style={{ width: `${clickRate}%` }} />
       </span>
       <span className="campaign-events-rates">
-        {formatRate(stats?.opened, stats?.sent)} open ·{" "}
-        {formatRate(stats?.clicked, stats?.sent)} click
+        {formatRate(stats?.opened, stats?.sent)} open · {formatRate(stats?.clicked, stats?.sent)}{" "}
+        click
       </span>
       <span className="campaign-events-label">Events</span>
     </a>
@@ -988,10 +925,7 @@ function EventsView(props: {
           ))}
         </select>
         <div className="metric-row">
-          <Metric
-            label="Open rate"
-            value={formatRate(props.stats?.opened, props.stats?.sent)}
-          />
+          <Metric label="Open rate" value={formatRate(props.stats?.opened, props.stats?.sent)} />
           <Metric
             label="Click rate"
             value={formatRate(props.stats?.clicked, props.stats?.sent)}

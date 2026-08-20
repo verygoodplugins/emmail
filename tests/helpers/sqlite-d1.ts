@@ -45,7 +45,7 @@ export async function createSqliteD1(): Promise<D1Database> {
           const result = await this.all();
           const first = (result.results?.[0] ?? null) as Record<string, unknown> | null;
           return column && first ? first[column] : first;
-        }
+        },
       };
     },
     async batch(statements: D1PreparedStatement[]) {
@@ -61,7 +61,7 @@ export async function createSqliteD1(): Promise<D1Database> {
     },
     dump() {
       return database.export();
-    }
+    },
   };
 
   return d1 as unknown as D1Database;

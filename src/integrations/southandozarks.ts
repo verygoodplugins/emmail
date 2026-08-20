@@ -22,20 +22,25 @@ export async function ingestSouthOzarksContactMessage(
   }
 
   const providerEventId = `contact_messages:${String(input.id)}`;
-  const existingEvent = await db.prepare(
-    "SELECT id FROM events WHERE provider_event_id = ? AND type = 'contact_ingested' LIMIT 1"
-  ).bind(providerEventId).first<{ id: string }>();
+  const existingEvent = await db
+    .prepare(
+      "SELECT id FROM events WHERE provider_event_id = ? AND type = 'contact_ingested' LIMIT 1"
+    )
+    .bind(providerEventId)
+    .first<{ id: string }>();
 
   const nameParts = parseNameParts(String(input.name ?? ""));
   const contacts = new ContactRepository(db);
-  await contacts.importContacts([{
-    email,
-    firstName: nameParts.firstName,
-    lastName: nameParts.lastName,
-    status: "subscribed",
-    lists: ["South & Ozarks"],
-    tags: ["contact-form", "website-inquiry"]
-  }]);
+  await contacts.importContacts([
+    {
+      email,
+      firstName: nameParts.firstName,
+      lastName: nameParts.lastName,
+      status: "subscribed",
+      lists: ["South & Ozarks"],
+      tags: ["contact-form", "website-inquiry"],
+    },
+  ]);
 
   const contact = await contacts.getContactByEmail(email);
   if (!contact) {
@@ -51,15 +56,18 @@ export async function ingestSouthOzarksContactMessage(
         source: input.source ?? "contact-form",
         phone: input.phone ?? "",
         message: input.message ?? "",
-        createdAt: input.createdAt ?? ""
-      }
+        createdAt: input.createdAt ?? "",
+      },
     });
   }
 
   return { contact: { id: contact.id, email: contact.email }, duplicate: Boolean(existingEvent) };
 }
 
-export async function verifySharedSecret(expected: string, actual: string | null): Promise<boolean> {
+export async function verifySharedSecret(
+  expected: string,
+  actual: string | null
+): Promise<boolean> {
   if (!expected || !actual) {
     return false;
   }
@@ -67,7 +75,7 @@ export async function verifySharedSecret(expected: string, actual: string | null
   const encoder = new TextEncoder();
   const [expectedHash, actualHash] = await Promise.all([
     crypto.subtle.digest("SHA-256", encoder.encode(expected)),
-    crypto.subtle.digest("SHA-256", encoder.encode(actual))
+    crypto.subtle.digest("SHA-256", encoder.encode(actual)),
   ]);
   const expectedBytes = new Uint8Array(expectedHash);
   const actualBytes = new Uint8Array(actualHash);

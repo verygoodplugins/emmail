@@ -15,7 +15,9 @@ describe("Worker welcome wiring", () => {
     env = {
       DB: db,
       SEND_QUEUE: { send: vi.fn(), sendBatch: vi.fn() } as unknown as Queue,
-      ASSETS: { fetch: vi.fn(async () => new Response("asset", { status: 404 })) } as unknown as Fetcher,
+      ASSETS: {
+        fetch: vi.fn(async () => new Response("asset", { status: 404 })),
+      } as unknown as Fetcher,
       RESEND_API_KEY: "re_test",
       RESEND_WEBHOOK_SECRET: "whsec_test",
       TRACKING_SECRET: "track_secret",
@@ -25,16 +27,19 @@ describe("Worker welcome wiring", () => {
       EMMAIL_INGEST_SECRET: "ingest_secret",
       EMMAIL_SEND_MODE: "live",
       EMMAIL_ADMIN_TOKEN: "admin_secret",
-      EMMAIL_WELCOME_ENABLED: "true"
+      EMMAIL_WELCOME_ENABLED: "true",
     };
   });
 
   function ingest(body: Record<string, unknown>): Promise<Response> {
-    return handleRequest(new Request("https://mail.example.com/api/integrations/southandozarks/contact-message", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-emmail-ingest-secret": "ingest_secret" },
-      body: JSON.stringify(body)
-    }), env);
+    return handleRequest(
+      new Request("https://mail.example.com/api/integrations/southandozarks/contact-message", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-emmail-ingest-secret": "ingest_secret" },
+        body: JSON.stringify(body),
+      }),
+      env
+    );
   }
 
   function queuedMessages() {
@@ -54,7 +59,11 @@ describe("Worker welcome wiring", () => {
     await ingest({ id: 1, name: "Ada Lovelace", email: "ada@example.com" });
     const contact = await new ContactRepository(env.DB).getContactByEmail("ada@example.com");
     // Simulate the consumer having delivered the welcome.
-    await new CampaignRepository(env.DB).recordEvent({ contactId: contact!.id, type: "welcome_sent", providerEventId: "dry-run" });
+    await new CampaignRepository(env.DB).recordEvent({
+      contactId: contact!.id,
+      type: "welcome_sent",
+      providerEventId: "dry-run",
+    });
 
     // A second, distinct submission from the same person (new provider id).
     await ingest({ id: 2, name: "Ada Lovelace", email: "ada@example.com" });
@@ -69,7 +78,9 @@ describe("Worker welcome wiring", () => {
   });
 
   it("captures the lead and self-heals a dropped enqueue on a same-id replay", async () => {
-    (env.SEND_QUEUE.send as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("queue down"));
+    (env.SEND_QUEUE.send as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("queue down")
+    );
     const response = await ingest({ id: 1, name: "Ada Lovelace", email: "ada@example.com" });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ ok: true });
@@ -86,7 +97,9 @@ describe("Worker welcome wiring", () => {
   describe("contact-scoped unsubscribe", () => {
     async function seedContact(email = "lead@example.com"): Promise<string> {
       const contacts = new ContactRepository(env.DB);
-      await contacts.importContacts([{ email, firstName: "Lead", lastName: "", status: "subscribed", lists: [], tags: [] }]);
+      await contacts.importContacts([
+        { email, firstName: "Lead", lastName: "", status: "subscribed", lists: [], tags: [] },
+      ]);
       const contact = await contacts.getContactByEmail(email);
       return contact!.id;
     }
@@ -113,7 +126,7 @@ describe("Worker welcome wiring", () => {
         new Request(`https://mail.example.com/unsubscribe/c/${contactId}/${token}`, {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: "List-Unsubscribe=One-Click"
+          body: "List-Unsubscribe=One-Click",
         }),
         env
       );

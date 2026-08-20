@@ -6,7 +6,7 @@ import { ContactRepository } from "../../src/db/contact-repository";
 import {
   enqueueDueAutomations,
   maybeEnrollContactCreated,
-  processAutomationEnrollment
+  processAutomationEnrollment,
 } from "../../src/queue/automation";
 import type { ResendEmailAdapter, ResendEmailMessage } from "../../src/queue/welcome";
 import type { Env } from "../../src/env";
@@ -28,24 +28,29 @@ describe("multi-step automations", () => {
       DEFAULT_FROM_EMAIL: "news@example.com",
       DEFAULT_FROM_NAME: "EmMail",
       EMMAIL_INGEST_SECRET: "ingest_secret",
-      EMMAIL_SEND_MODE: "live"
+      EMMAIL_SEND_MODE: "live",
     };
   });
 
   async function createContact(email = "lead@example.com"): Promise<string> {
     const contacts = new ContactRepository(env.DB);
-    await contacts.importContacts([{
-      email,
-      firstName: "Dana",
-      lastName: "Lead",
-      status: "subscribed",
-      lists: ["South & Ozarks"],
-      tags: ["contact-form"]
-    }]);
+    await contacts.importContacts([
+      {
+        email,
+        firstName: "Dana",
+        lastName: "Lead",
+        status: "subscribed",
+        lists: ["South & Ozarks"],
+        tags: ["contact-form"],
+      },
+    ]);
     return (await contacts.getContactByEmail(email))!.id;
   }
 
-  function successAdapter(idPrefix = "email_auto"): { adapter: ResendEmailAdapter; sendEmail: ReturnType<typeof vi.fn> } {
+  function successAdapter(idPrefix = "email_auto"): {
+    adapter: ResendEmailAdapter;
+    sendEmail: ReturnType<typeof vi.fn>;
+  } {
     let n = 0;
     const sendEmail = vi.fn(async (_message: ResendEmailMessage) => {
       n += 1;
@@ -68,7 +73,7 @@ describe("multi-step automations", () => {
       "send_email",
       "wait",
       "send_email",
-      "add_tag"
+      "add_tag",
     ]);
     // Idempotent.
     const again = await repo.ensureWelcomeSequence();
@@ -97,7 +102,11 @@ describe("multi-step automations", () => {
     const { adapter, sendEmail } = successAdapter();
 
     // First drain: send welcome, then park on the wait step.
-    const first = await processAutomationEnrollment(env, { type: "automation", enrollmentId }, adapter);
+    const first = await processAutomationEnrollment(
+      env,
+      { type: "automation", enrollmentId },
+      adapter
+    );
     expect(first.status).toBe("waiting");
     expect(sendEmail).toHaveBeenCalledTimes(1);
     expect(sendEmail.mock.calls[0][0].subject).toContain("Thanks for reaching out");
@@ -109,9 +118,13 @@ describe("multi-step automations", () => {
 
     // Force the wait due and resume: follow-up email + tag + complete.
     await repo.updateEnrollment(enrollmentId, {
-      nextRunAt: new Date(Date.now() - 1000).toISOString()
+      nextRunAt: new Date(Date.now() - 1000).toISOString(),
     });
-    const second = await processAutomationEnrollment(env, { type: "automation", enrollmentId }, adapter);
+    const second = await processAutomationEnrollment(
+      env,
+      { type: "automation", enrollmentId },
+      adapter
+    );
     expect(second.status).toBe("completed");
     expect(sendEmail).toHaveBeenCalledTimes(2);
     expect(sendEmail.mock.calls[1][0].subject).toContain("Anything else");
@@ -139,10 +152,16 @@ describe("multi-step automations", () => {
     const enrollmentId = queuedMessages()[0].body.enrollmentId as string;
 
     const { adapter, sendEmail } = successAdapter();
-    const result = await processAutomationEnrollment(env, { type: "automation", enrollmentId }, adapter);
+    const result = await processAutomationEnrollment(
+      env,
+      { type: "automation", enrollmentId },
+      adapter
+    );
     expect(result.status).toBe("waiting");
     expect(sendEmail).not.toHaveBeenCalled();
-    expect(await new CampaignRepository(env.DB).hasContactEvent(contactId, ["automation_email_skipped"])).toBe(true);
+    expect(
+      await new CampaignRepository(env.DB).hasContactEvent(contactId, ["automation_email_skipped"])
+    ).toBe(true);
   });
 
   it("kill-switches when the automation is disabled mid-flight", async () => {
@@ -155,7 +174,11 @@ describe("multi-step automations", () => {
     await repo.setEnabled(seeded.id, false);
 
     const { adapter, sendEmail } = successAdapter();
-    const result = await processAutomationEnrollment(env, { type: "automation", enrollmentId }, adapter);
+    const result = await processAutomationEnrollment(
+      env,
+      { type: "automation", enrollmentId },
+      adapter
+    );
     expect(result.status).toBe("skipped");
     expect(result.reason).toBe("automation-disabled");
     expect(sendEmail).not.toHaveBeenCalled();
@@ -173,7 +196,9 @@ describe("multi-step automations", () => {
     const { adapter, sendEmail } = successAdapter();
     await processAutomationEnrollment(env, { type: "automation", enrollmentId }, adapter);
     expect(sendEmail).not.toHaveBeenCalled();
-    expect(await new CampaignRepository(env.DB).hasContactEvent(contactId, ["automation_email_sent"])).toBe(true);
+    expect(
+      await new CampaignRepository(env.DB).hasContactEvent(contactId, ["automation_email_sent"])
+    ).toBe(true);
   });
 
   it("cron sweeper re-queues due waiting enrollments", async () => {
@@ -184,11 +209,15 @@ describe("multi-step automations", () => {
     await maybeEnrollContactCreated(env, contactId);
     const enrollmentId = queuedMessages()[0].body.enrollmentId as string;
 
-    await processAutomationEnrollment(env, { type: "automation", enrollmentId }, successAdapter().adapter);
+    await processAutomationEnrollment(
+      env,
+      { type: "automation", enrollmentId },
+      successAdapter().adapter
+    );
     (env.SEND_QUEUE.send as unknown as ReturnType<typeof vi.fn>).mockClear();
 
     await repo.updateEnrollment(enrollmentId, {
-      nextRunAt: new Date(Date.now() - 1000).toISOString()
+      nextRunAt: new Date(Date.now() - 1000).toISOString(),
     });
     expect(await enqueueDueAutomations(env)).toBe(1);
     expect(queuedMessages()[0].body).toEqual({ type: "automation", enrollmentId });
@@ -203,7 +232,11 @@ describe("multi-step automations", () => {
     const enrollmentId = queuedMessages()[0].body.enrollmentId as string;
     (env.SEND_QUEUE.send as unknown as ReturnType<typeof vi.fn>).mockClear();
 
-    await processAutomationEnrollment(env, { type: "automation", enrollmentId }, successAdapter().adapter);
+    await processAutomationEnrollment(
+      env,
+      { type: "automation", enrollmentId },
+      successAdapter().adapter
+    );
     const wake = queuedMessages().find((entry) => entry.body.type === "automation");
     expect(wake?.options).toMatchObject({ delaySeconds: 120 });
   });
