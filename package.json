@@ -52,7 +52,7 @@
     "@types/sql.js": "^1.4.9",
     "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^9.2.0",
-    "jsdom": "^25.0.1",
+    "jsdom": "^30.0.1",
     "playwright-core": "^1.61.0",
     "prettier": "^3.5.3",
     "sql.js": "^1.12.0",
