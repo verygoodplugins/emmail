@@ -85,6 +85,19 @@ describe("D1 repositories", () => {
     // Ordering ties on created_at break on the random recipient id — stable
     // across retries of the same batch, but not alphabetical.
     expect(recipients.map((recipient) => recipient.email).sort()).toEqual(["ada@example.com", "grace@example.com"]);
+    expect((await campaigns.getCampaign(campaign.id))?.status).toBe("sending");
+
+    const resumed = await campaigns.snapshotAudience(campaign.id);
+    expect(resumed.createdRecipients).toBe(0);
+    await expect(campaigns.updateCampaign(campaign.id, {
+      name: "Too late",
+      subject: "Too late",
+      previewText: "",
+      markdownBody: "Nope",
+      fromName: "EmMail",
+      fromEmail: "news@example.com",
+      audience: { listIds: ["Newsletter"], tagIds: ["vip"] }
+    })).rejects.toThrow(CampaignConflictError);
   });
 
   it("applies batch send results atomically with the batch marker", async () => {

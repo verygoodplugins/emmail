@@ -87,16 +87,28 @@ export class CampaignRepository {
   }
 
   async snapshotAudience(campaignId: string): Promise<{ createdRecipients: number; skippedSuppressed: number }> {
+    const now = nowIso();
+    const claimed = await this.db.prepare(
+      `UPDATE campaigns
+       SET status = 'sending', updated_at = ?
+       WHERE id = ? AND status = 'draft'`
+    ).bind(now, campaignId).run();
+
     const campaign = await this.getCampaign(campaignId);
     if (!campaign) {
       throw new Error("Campaign not found");
+    }
+    if (Number(claimed.meta?.changes ?? 0) === 0 && campaign.status === "sent") {
+      return { createdRecipients: 0, skippedSuppressed: 0 };
+    }
+    if (campaign.status !== "sending") {
+      throw new CampaignConflictError();
     }
 
     const audience = campaign.audience;
     const contacts = await this.selectAudience(audience);
     let createdRecipients = 0;
     let skippedSuppressed = 0;
-    const now = nowIso();
 
     for (const contact of contacts) {
       const suppressed = await this.db.prepare("SELECT id FROM suppressions WHERE email = ? LIMIT 1").bind(contact.email).first();
@@ -117,8 +129,9 @@ export class CampaignRepository {
       createdRecipients += Number(result.meta?.changes ?? 0);
     }
 
-    if (createdRecipients > 0) {
-      await this.updateCampaignStatus(campaignId, "sending");
+    const pending = await this.countRecipientsByStatus(campaignId, "pending");
+    if (pending === 0) {
+      await this.updateCampaignStatus(campaignId, "sent");
     }
 
     return { createdRecipients, skippedSuppressed };
