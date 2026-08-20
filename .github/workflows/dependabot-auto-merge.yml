@@ -30,6 +30,7 @@ jobs:
           github.event.workflow_run.conclusion == 'success'
         )
       }}
-    uses: verygoodplugins/.github/.github/workflows/dependabot-auto-merge.yml@main
+    # Pin to immutable SHA (not @main) so privileged write access cannot track a floating branch.
+    uses: verygoodplugins/.github/.github/workflows/dependabot-auto-merge.yml@20252be624eca94c9eb852c8ba1d1063ec734101 # main @ 2026-05-17
     secrets:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
