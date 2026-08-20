@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "worker:dev": "wrangler dev --local",
+    "dev": "vite",
+    "dev:setup": "npm run db:migrate:local",
+    "dev:local": "concurrently -n worker,vite -c blue,green \"npm run worker:dev\" \"npm run dev\"",
+    "worker:dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
     "db:migrate:local": "wrangler d1 migrations apply autojack --local",
     "db:migrate:remote": "wrangler d1 migrations apply autojack --remote",
     "build": "npm run build:admin && npm run typecheck",
@@ -13,8 +15,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "sample:seed": "curl -fsS -X POST http://localhost:8787/api/sample-data/seed",
-    "sample:clear": "curl -fsS -X POST http://localhost:8787/api/sample-data/clear",
+    "test:ingest": "vitest run tests/worker/ingest-automation.test.ts",
+    "sample:seed": "curl -fsS -X POST http://127.0.0.1:8787/api/sample-data/seed",
+    "sample:clear": "curl -fsS -X POST http://127.0.0.1:8787/api/sample-data/clear",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
@@ -38,7 +41,8 @@
     "typescript": "^5.8.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.9",
-    "wrangler": "^4.20.0"
+    "wrangler": "^4.20.0",
+    "concurrently": "^9.2.0"
   },
   "overrides": {
     "esbuild": "^0.28.1",

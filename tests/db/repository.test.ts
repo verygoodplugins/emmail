@@ -2,6 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { applyMigrations, createSqliteD1 } from "../helpers/sqlite-d1";
 import { ContactRepository } from "../../src/db/contact-repository";
 import { CampaignRepository } from "../../src/db/campaign-repository";
+import {
+  AutomationConflictError,
+  AutomationEmptyStepsError,
+  AutomationRepository,
+  AutomationValidationError
+} from "../../src/db/automation-repository";
 
 describe("D1 repositories", () => {
   let db: D1Database;
@@ -150,6 +156,105 @@ describe("D1 repositories", () => {
       pending: 0,
       failed: 0
     });
+  });
+});
+
+describe("AutomationRepository", () => {
+  let db: D1Database;
+
+  beforeEach(async () => {
+    db = await createSqliteD1();
+    await applyMigrations(db);
+  });
+
+  it("creates a disabled automation with a unique slug", async () => {
+    const repo = new AutomationRepository(db);
+    const first = await repo.createAutomation("Onboarding flow");
+    const second = await repo.createAutomation("Onboarding flow");
+
+    expect(first).toMatchObject({
+      name: "Onboarding flow",
+      slug: "onboarding-flow",
+      triggerType: "contact_created",
+      enabled: false,
+      steps: []
+    });
+    expect(second.slug).toBe("onboarding-flow-2");
+  });
+
+  it("updates the automation name while disabled", async () => {
+    const repo = new AutomationRepository(db);
+    const created = await repo.createAutomation("Draft sequence");
+    const updated = await repo.updateAutomationName(created.id, "Renamed sequence");
+
+    expect(updated?.name).toBe("Renamed sequence");
+  });
+
+  it("replaces steps atomically while disabled", async () => {
+    const repo = new AutomationRepository(db);
+    const created = await repo.createAutomation("Draft sequence");
+    const saved = await repo.replaceSteps(created.id, [
+      {
+        stepType: "send_email",
+        config: { subject: "Hello", markdownBody: "Hi **there**" }
+      },
+      {
+        stepType: "wait",
+        config: { seconds: 60 }
+      },
+      {
+        stepType: "add_tag",
+        config: { tagName: "onboarded" }
+      }
+    ]);
+
+    expect(saved?.steps).toHaveLength(3);
+    expect(saved?.steps[0]).toMatchObject({
+      position: 0,
+      stepType: "send_email",
+      config: { subject: "Hello", markdownBody: "Hi **there**" }
+    });
+    expect(saved?.steps[1]).toMatchObject({ position: 1, stepType: "wait", config: { seconds: 60 } });
+    expect(saved?.steps[2]).toMatchObject({ position: 2, stepType: "add_tag", config: { tagName: "onboarded" } });
+  });
+
+  it("rejects writes while enabled", async () => {
+    const repo = new AutomationRepository(db);
+    const created = await repo.createAutomation("Live sequence");
+    await repo.replaceSteps(created.id, [
+      { stepType: "wait", config: { seconds: 30 } }
+    ]);
+    await repo.setEnabled(created.id, true);
+
+    await expect(repo.updateAutomationName(created.id, "Blocked")).rejects.toThrow(AutomationConflictError);
+    await expect(
+      repo.replaceSteps(created.id, [{ stepType: "wait", config: { seconds: 60 } }])
+    ).rejects.toThrow(AutomationConflictError);
+  });
+
+  it("rejects enabling an automation with no steps", async () => {
+    const repo = new AutomationRepository(db);
+    const created = await repo.createAutomation("Empty sequence");
+
+    await expect(repo.setEnabled(created.id, true)).rejects.toThrow(AutomationEmptyStepsError);
+  });
+
+  it("validates step configs before replacing", async () => {
+    const repo = new AutomationRepository(db);
+    const created = await repo.createAutomation("Draft sequence");
+
+    await expect(
+      repo.replaceSteps(created.id, [{ stepType: "send_email", config: { subject: "", markdownBody: "" } }])
+    ).rejects.toThrow(AutomationValidationError);
+    await expect(
+      repo.replaceSteps(created.id, [{ stepType: "wait", config: { seconds: 0 } }])
+    ).rejects.toThrow(AutomationValidationError);
+    await expect(
+      repo.replaceSteps(created.id, [{ stepType: "add_tag", config: { tagName: "" } }])
+    ).rejects.toThrow(AutomationValidationError);
+    await expect(
+      repo.replaceSteps(created.id, [{ stepType: "wait", config: undefined as unknown as Record<string, unknown> }])
+    ).rejects.toThrow(AutomationValidationError);
   });
 });
 

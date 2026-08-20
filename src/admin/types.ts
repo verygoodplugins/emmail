@@ -60,9 +60,30 @@ export interface AutomationStep {
   id: string;
   automationId: string;
   position: number;
-  stepType: "send_email" | "wait" | "add_tag";
+  stepType: AutomationStepType;
   config: Record<string, unknown>;
   createdAt: string;
+}
+
+export type AutomationStepType = "send_email" | "wait" | "add_tag";
+
+export interface StepDraft {
+  stepType: AutomationStepType;
+  config: Record<string, unknown>;
+}
+
+export interface SendEmailStepConfig {
+  subject: string;
+  previewText?: string;
+  markdownBody: string;
+}
+
+export interface WaitStepConfig {
+  seconds: number;
+}
+
+export interface AddTagStepConfig {
+  tagName: string;
 }
 
 export interface AutomationSummary {
@@ -93,4 +114,32 @@ export interface AutomationEnrollment {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type AutomationPreviewItem =
+  | {
+      kind: "send_email";
+      offsetSeconds: number;
+      timingLabel: string;
+      subject: string;
+      previewText: string;
+      html: string;
+    }
+  | {
+      kind: "wait";
+      offsetSeconds: number;
+      timingLabel: string;
+      seconds: number;
+      durationLabel: string;
+    }
+  | {
+      kind: "add_tag";
+      offsetSeconds: number;
+      timingLabel: string;
+      tagName: string;
+    };
+
+export interface AutomationPreviewResult {
+  sample: { firstName: string };
+  timeline: AutomationPreviewItem[];
 }

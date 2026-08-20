@@ -1,24 +1,51 @@
 import type { Env, SendQueueMessage } from "./env";
 import { Resend } from "resend";
-import { AutomationRepository } from "./db/automation-repository";
+import {
+  AutomationRepository,
+  AutomationConflictError,
+  AutomationEmptyStepsError,
+  AutomationValidationError,
+  type AutomationStepType,
+  type StepInput,
+} from "./db/automation-repository";
+import { buildAutomationPreview } from "./email/preview-sequence";
 import { CampaignRepository } from "./db/campaign-repository";
 import { ContactRepository } from "./db/contact-repository";
-import { clearSampleData, getSampleDataStatus, seedSampleData } from "./db/sample-data";
-import { ingestSouthOzarksContactMessage, verifySharedSecret } from "./integrations/southandozarks";
-import { basePathFromAppBaseUrl, rewriteRequestPath, stripBasePath } from "./lib/base-path";
+import {
+  clearSampleData,
+  getSampleDataStatus,
+  seedSampleData,
+} from "./db/sample-data";
+import {
+  ingestSouthOzarksContactMessage,
+  verifySharedSecret,
+} from "./integrations/southandozarks";
+import {
+  basePathFromAppBaseUrl,
+  rewriteRequestPath,
+  stripBasePath,
+} from "./lib/base-path";
 import { previewContactsCsv } from "./lib/csv";
 import { createId, nowIso } from "./lib/ids";
 import { verifyToken } from "./lib/tokens";
-import { enqueueDueAutomations, maybeEnrollContactCreated, processAutomationEnrollment } from "./queue/automation";
+import {
+  enqueueDueAutomations,
+  maybeEnrollContactCreated,
+  processAutomationEnrollment,
+} from "./queue/automation";
 import { processCampaignSend } from "./queue/send";
 import { maybeEnqueueWelcome, processWelcomeSend } from "./queue/welcome";
 import { handleVerifiedResendWebhook } from "./webhooks/resend";
 
-export async function handleRequest(request: Request, env: Env): Promise<Response> {
+export async function handleRequest(
+  request: Request,
+  env: Env,
+): Promise<Response> {
   const url = new URL(request.url);
   const basePath = basePathFromAppBaseUrl(env.APP_BASE_URL);
   const path = stripBasePath(url.pathname, basePath);
-  const assetRequest = path === url.pathname ? request : rewriteRequestPath(request, path);
+  const assetRequest =
+    path === url.pathname ? request : rewriteRequestPath(request, path);
 
   try {
     if (path === "/login") {
@@ -41,8 +68,16 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const contacts = new ContactRepository(env.DB);
       const imported = await contacts.importContacts(preview.accepted);
       await env.DB.prepare(
-        "INSERT INTO imports (id, status, total_rows, accepted_rows, rejected_rows, created_at) VALUES (?, 'complete', ?, ?, ?, ?)"
-      ).bind(createId("imp"), preview.summary.totalRows, preview.summary.acceptedRows, preview.summary.rejectedRows, nowIso()).run();
+        "INSERT INTO imports (id, status, total_rows, accepted_rows, rejected_rows, created_at) VALUES (?, 'complete', ?, ?, ?, ?)",
+      )
+        .bind(
+          createId("imp"),
+          preview.summary.totalRows,
+          preview.summary.acceptedRows,
+          preview.summary.rejectedRows,
+          nowIso(),
+        )
+        .run();
       return json({ ...preview, ...imported });
     }
 
@@ -58,12 +93,21 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(await clearSampleData(env.DB));
     }
 
-    if (request.method === "POST" && path === "/api/integrations/southandozarks/contact-message") {
-      const authorized = await verifySharedSecret(env.EMMAIL_INGEST_SECRET, request.headers.get("x-emmail-ingest-secret"));
+    if (
+      request.method === "POST" &&
+      path === "/api/integrations/southandozarks/contact-message"
+    ) {
+      const authorized = await verifySharedSecret(
+        env.EMMAIL_INGEST_SECRET,
+        request.headers.get("x-emmail-ingest-secret"),
+      );
       if (!authorized) {
         return json({ error: "Unauthorized" }, 401);
       }
-      const result = await ingestSouthOzarksContactMessage(env.DB, await request.json());
+      const result = await ingestSouthOzarksContactMessage(
+        env.DB,
+        await request.json(),
+      );
       // Gate the welcome on welcome_sent (inside maybeEnqueueWelcome), NOT on the
       // ingest `duplicate` flag: a duplicate replay is exactly how a dropped
       // enqueue self-heals, and welcome_sent already caps delivery at one per
@@ -88,30 +132,83 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(await new AutomationRepository(env.DB).listAutomations());
     }
 
-    if (request.method === "POST" && path === "/api/automations/seed-welcome") {
-      return json(await new AutomationRepository(env.DB).ensureWelcomeSequence(), 201);
+    if (request.method === "POST" && path === "/api/automations") {
+      const body = await request.json<{ name: string }>();
+      const automation = await new AutomationRepository(
+        env.DB,
+      ).createAutomation(body.name ?? "");
+      return json(automation, 201);
     }
 
-    const automationToggleMatch = path.match(/^\/api\/automations\/([^/]+)\/(enable|disable)$/);
-    if (request.method === "POST" && automationToggleMatch) {
-      const automation = await new AutomationRepository(env.DB).setEnabled(
-        automationToggleMatch[1],
-        automationToggleMatch[2] === "enable"
+    if (request.method === "POST" && path === "/api/automations/preview") {
+      const body = await request.json<{ firstName?: string; steps: StepInput[] }>();
+      return json(await buildAutomationPreview({
+        firstName: body.firstName,
+        steps: body.steps ?? []
+      }));
+    }
+
+    if (request.method === "POST" && path === "/api/automations/seed-welcome") {
+      return json(
+        await new AutomationRepository(env.DB).ensureWelcomeSequence(),
+        201,
+      );
+    }
+
+    const automationMatch = path.match(/^\/api\/automations\/([^/]+)$/);
+    if (request.method === "PATCH" && automationMatch) {
+      const body = await request.json<{ name: string }>();
+      const automation = await new AutomationRepository(
+        env.DB,
+      ).updateAutomationName(automationMatch[1], body.name ?? "");
+      return automation ? json(automation) : json({ error: "Not found" }, 404);
+    }
+
+    const automationStepsMatch = path.match(
+      /^\/api\/automations\/([^/]+)\/steps$/,
+    );
+    if (request.method === "PUT" && automationStepsMatch) {
+      const body = await request.json<{ steps: StepInput[] }>();
+      const automation = await new AutomationRepository(env.DB).replaceSteps(
+        automationStepsMatch[1],
+        (body.steps ?? []).map((step) => ({
+          stepType: step.stepType as AutomationStepType,
+          config: step.config,
+        })),
       );
       return automation ? json(automation) : json({ error: "Not found" }, 404);
     }
 
-    const automationEnrollmentsMatch = path.match(/^\/api\/automations\/([^/]+)\/enrollments$/);
+    const automationToggleMatch = path.match(
+      /^\/api\/automations\/([^/]+)\/(enable|disable)$/,
+    );
+    if (request.method === "POST" && automationToggleMatch) {
+      const automation = await new AutomationRepository(env.DB).setEnabled(
+        automationToggleMatch[1],
+        automationToggleMatch[2] === "enable",
+      );
+      return automation ? json(automation) : json({ error: "Not found" }, 404);
+    }
+
+    const automationEnrollmentsMatch = path.match(
+      /^\/api\/automations\/([^/]+)\/enrollments$/,
+    );
     if (request.method === "GET" && automationEnrollmentsMatch) {
-      return json(await new AutomationRepository(env.DB).listEnrollments(automationEnrollmentsMatch[1]));
+      return json(
+        await new AutomationRepository(env.DB).listEnrollments(
+          automationEnrollmentsMatch[1],
+        ),
+      );
     }
 
     if (request.method === "GET" && path === "/api/contacts") {
       const contacts = new ContactRepository(env.DB);
-      return json(await contacts.listContacts({
-        limit: Number(url.searchParams.get("limit") ?? 50),
-        offset: Number(url.searchParams.get("offset") ?? 0)
-      }));
+      return json(
+        await contacts.listContacts({
+          limit: Number(url.searchParams.get("limit") ?? 50),
+          offset: Number(url.searchParams.get("offset") ?? 0),
+        }),
+      );
     }
 
     if (request.method === "GET" && path === "/api/lists") {
@@ -119,7 +216,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
 
     if (request.method === "POST" && path === "/api/lists") {
-      return createName(env.DB, "lists", "lst", await request.json<{ name: string }>());
+      return createName(
+        env.DB,
+        "lists",
+        "lst",
+        await request.json<{ name: string }>(),
+      );
     }
 
     if (request.method === "GET" && path === "/api/tags") {
@@ -127,7 +229,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
 
     if (request.method === "POST" && path === "/api/tags") {
-      return createName(env.DB, "tags", "tag", await request.json<{ name: string }>());
+      return createName(
+        env.DB,
+        "tags",
+        "tag",
+        await request.json<{ name: string }>(),
+      );
     }
 
     if (request.method === "GET" && path === "/api/campaigns") {
@@ -153,8 +260,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         fromEmail: body.fromEmail ?? env.DEFAULT_FROM_EMAIL,
         audience: {
           listIds: body.audience?.listIds ?? [],
-          tagIds: body.audience?.tagIds ?? []
-        }
+          tagIds: body.audience?.tagIds ?? [],
+        },
       });
       return json(campaign, 201);
     }
@@ -167,7 +274,10 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       // Enqueue whenever recipients are pending, not just when the snapshot
       // created new ones — re-posting /send resumes a campaign whose queue
       // message was lost.
-      const pendingRecipients = await campaigns.countRecipientsByStatus(campaignId, "pending");
+      const pendingRecipients = await campaigns.countRecipientsByStatus(
+        campaignId,
+        "pending",
+      );
       const queuedJobs = pendingRecipients > 0 ? 1 : 0;
       if (queuedJobs) {
         await env.SEND_QUEUE.send({ campaignId, limit: 100 });
@@ -177,17 +287,25 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     const campaignStatsMatch = path.match(/^\/api\/campaigns\/([^/]+)\/stats$/);
     if (request.method === "GET" && campaignStatsMatch) {
-      return json(await new CampaignRepository(env.DB).getCampaignStats(campaignStatsMatch[1]));
+      return json(
+        await new CampaignRepository(env.DB).getCampaignStats(
+          campaignStatsMatch[1],
+        ),
+      );
     }
 
-    const campaignEventsMatch = path.match(/^\/api\/campaigns\/([^/]+)\/events$/);
+    const campaignEventsMatch = path.match(
+      /^\/api\/campaigns\/([^/]+)\/events$/,
+    );
     if (request.method === "GET" && campaignEventsMatch) {
       return json(await campaignEvents(env.DB, campaignEventsMatch[1]));
     }
 
     const campaignGetMatch = path.match(/^\/api\/campaigns\/([^/]+)$/);
     if (request.method === "GET" && campaignGetMatch) {
-      const campaign = await new CampaignRepository(env.DB).getCampaign(campaignGetMatch[1]);
+      const campaign = await new CampaignRepository(env.DB).getCampaign(
+        campaignGetMatch[1],
+      );
       return campaign ? json(campaign) : json({ error: "Not found" }, 404);
     }
 
@@ -201,11 +319,20 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return handleClick(env, clickMatch[1], clickMatch[2], clickMatch[3]);
     }
 
-    const contactUnsubscribeMatch = path.match(/^\/unsubscribe\/c\/([^/]+)\/([^/]+)$/);
-    if ((request.method === "GET" || request.method === "POST") && contactUnsubscribeMatch) {
+    const contactUnsubscribeMatch = path.match(
+      /^\/unsubscribe\/c\/([^/]+)\/([^/]+)$/,
+    );
+    if (
+      (request.method === "GET" || request.method === "POST") &&
+      contactUnsubscribeMatch
+    ) {
       // POST supports RFC 8058 one-click unsubscribe (the List-Unsubscribe-Post
       // header advertised on welcome mail); GET supports a human clicking it.
-      return handleContactUnsubscribe(env, contactUnsubscribeMatch[1], contactUnsubscribeMatch[2]);
+      return handleContactUnsubscribe(
+        env,
+        contactUnsubscribeMatch[1],
+        contactUnsubscribeMatch[2],
+      );
     }
 
     const unsubscribeMatch = path.match(/^\/unsubscribe\/([^/]+)\/([^/]+)$/);
@@ -223,7 +350,19 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     return json({ error: "Not found" }, 404);
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
+    if (
+      error instanceof AutomationConflictError ||
+      error instanceof AutomationEmptyStepsError
+    ) {
+      return json({ error: error.message }, 409);
+    }
+    if (error instanceof AutomationValidationError) {
+      return json({ error: error.message }, 400);
+    }
+    return json(
+      { error: error instanceof Error ? error.message : "Unknown error" },
+      500,
+    );
   }
 }
 
@@ -233,12 +372,21 @@ export default {
     const resend = new Resend(env.RESEND_API_KEY);
     const emailAdapter = {
       sendEmail: async (
-        payload: { from: string; to: string[]; subject: string; html: string; text: string; headers: Record<string, string> },
-        options: { idempotencyKey: string }
+        payload: {
+          from: string;
+          to: string[];
+          subject: string;
+          html: string;
+          text: string;
+          headers: Record<string, string>;
+        },
+        options: { idempotencyKey: string },
       ) => {
-        const response = await resend.emails.send(payload, { idempotencyKey: options.idempotencyKey });
+        const response = await resend.emails.send(payload, {
+          idempotencyKey: options.idempotencyKey,
+        });
         return { data: response.data, error: response.error };
-      }
+      },
     };
     for (const message of batch.messages) {
       const body = message.body;
@@ -250,9 +398,14 @@ export default {
         } else {
           await processCampaignSend(env, body, {
             sendBatch: async (messages, options) => {
-              const response = await resend.batch.send(messages, { idempotencyKey: options.idempotencyKey });
-              return { data: response.data?.data ?? null, error: response.error };
-            }
+              const response = await resend.batch.send(messages, {
+                idempotencyKey: options.idempotencyKey,
+              });
+              return {
+                data: response.data?.data ?? null,
+                error: response.error,
+              };
+            },
           });
         }
         message.ack();
@@ -272,14 +425,21 @@ export default {
     } catch (error) {
       console.error("Automation sweeper failed", error);
     }
-  }
+  },
 };
 
 function json(body: unknown, status = 200): Response {
-  return Response.json(body, { status, headers: { "cache-control": "no-store" } });
+  return Response.json(body, {
+    status,
+    headers: { "cache-control": "no-store" },
+  });
 }
 
-async function requiresAdminAuth(request: Request, env: Env, path: string): Promise<boolean> {
+async function requiresAdminAuth(
+  request: Request,
+  env: Env,
+  path: string,
+): Promise<boolean> {
   if (isPublicPath(request.method, path)) {
     return false;
   }
@@ -294,7 +454,8 @@ async function requiresAdminAuth(request: Request, env: Env, path: string): Prom
 function isPublicPath(method: string, path: string): boolean {
   return (
     path === "/login" ||
-    (method === "POST" && path === "/api/integrations/southandozarks/contact-message") ||
+    (method === "POST" &&
+      path === "/api/integrations/southandozarks/contact-message") ||
     (method === "POST" && path === "/webhooks/resend") ||
     /^\/t\/open\/[^/]+\/[^/]+\/[^/]+\.gif$/.test(path) ||
     /^\/t\/click\/[^/]+\/[^/]+\/[^/]+$/.test(path) ||
@@ -303,13 +464,22 @@ function isPublicPath(method: string, path: string): boolean {
   );
 }
 
-async function hasAdminAccess(request: Request, token: string): Promise<boolean> {
+async function hasAdminAccess(
+  request: Request,
+  token: string,
+): Promise<boolean> {
   const authorization = request.headers.get("authorization") ?? "";
   if (authorization.toLowerCase().startsWith("bearer ")) {
-    return verifySharedSecret(token, authorization.slice("bearer ".length).trim());
+    return verifySharedSecret(
+      token,
+      authorization.slice("bearer ".length).trim(),
+    );
   }
 
-  const cookieValue = readCookie(request.headers.get("cookie") ?? "", "emmail_admin");
+  const cookieValue = readCookie(
+    request.headers.get("cookie") ?? "",
+    "emmail_admin",
+  );
   if (!cookieValue) {
     return false;
   }
@@ -317,9 +487,16 @@ async function hasAdminAccess(request: Request, token: string): Promise<boolean>
   return verifySharedSecret(await adminSessionValue(token), cookieValue);
 }
 
-async function handleAdminLogin(request: Request, env: Env, basePath: string): Promise<Response> {
+async function handleAdminLogin(
+  request: Request,
+  env: Env,
+  basePath: string,
+): Promise<Response> {
   if (!env.EMMAIL_ADMIN_TOKEN) {
-    return adminLoginPage(basePath, "Admin access is disabled: EMMAIL_ADMIN_TOKEN is not configured.");
+    return adminLoginPage(
+      basePath,
+      "Admin access is disabled: EMMAIL_ADMIN_TOKEN is not configured.",
+    );
   }
 
   if (request.method === "GET") {
@@ -343,7 +520,7 @@ async function handleAdminLogin(request: Request, env: Env, basePath: string): P
     `Path=${cookiePath}`,
     "HttpOnly",
     "SameSite=Lax",
-    "Max-Age=604800"
+    "Max-Age=604800",
   ];
   if (env.APP_BASE_URL.startsWith("https://")) {
     cookieParts.push("Secure");
@@ -353,14 +530,15 @@ async function handleAdminLogin(request: Request, env: Env, basePath: string): P
     headers: {
       location: loginRedirectTarget(basePath),
       "set-cookie": cookieParts.join("; "),
-      "cache-control": "no-store"
-    }
+      "cache-control": "no-store",
+    },
   });
 }
 
 function adminLoginPage(basePath: string, message = ""): Response {
   const action = `${basePath}/login`.replace(/^\/\//, "/");
-  return new Response(`<!doctype html>
+  return new Response(
+    `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -387,14 +565,24 @@ function adminLoginPage(basePath: string, message = ""): Response {
     </form>
   </main>
 </body>
-</html>`, {
-    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
-  });
+</html>`,
+    {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
 }
 
 async function adminSessionValue(token: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`emmail-admin:${token}`));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`emmail-admin:${token}`),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 function readCookie(header: string, name: string): string {
@@ -419,47 +607,93 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-async function names(db: D1Database, table: "lists" | "tags"): Promise<Array<{ id: string; name: string }>> {
-  const result = await db.prepare(`SELECT id, name FROM ${table} ORDER BY name ASC`).all();
+async function names(
+  db: D1Database,
+  table: "lists" | "tags",
+): Promise<Array<{ id: string; name: string }>> {
+  const result = await db
+    .prepare(`SELECT id, name FROM ${table} ORDER BY name ASC`)
+    .all();
   return (result.results ?? []) as Array<{ id: string; name: string }>;
 }
 
-async function createName(db: D1Database, table: "lists" | "tags", prefix: string, body: { name: string }): Promise<Response> {
-  const existing = await db.prepare(`SELECT id, name FROM ${table} WHERE name = ?`).bind(body.name).first<{ id: string; name: string }>();
+async function createName(
+  db: D1Database,
+  table: "lists" | "tags",
+  prefix: string,
+  body: { name: string },
+): Promise<Response> {
+  const existing = await db
+    .prepare(`SELECT id, name FROM ${table} WHERE name = ?`)
+    .bind(body.name)
+    .first<{ id: string; name: string }>();
   if (existing) {
     return json(existing);
   }
   const record = { id: createId(prefix), name: body.name };
-  await db.prepare(`INSERT INTO ${table} (id, name, created_at) VALUES (?, ?, ?)`)
+  await db
+    .prepare(`INSERT INTO ${table} (id, name, created_at) VALUES (?, ?, ?)`)
     .bind(record.id, record.name, nowIso())
     .run();
   return json(record, 201);
 }
 
-async function campaignEvents(db: D1Database, campaignId: string): Promise<unknown[]> {
-  const result = await db.prepare(
-    "SELECT id, type, recipient_id, link_id, url, created_at FROM events WHERE campaign_id = ? ORDER BY created_at DESC LIMIT 200"
-  ).bind(campaignId).all();
+async function campaignEvents(
+  db: D1Database,
+  campaignId: string,
+): Promise<unknown[]> {
+  const result = await db
+    .prepare(
+      "SELECT id, type, recipient_id, link_id, url, created_at FROM events WHERE campaign_id = ? ORDER BY created_at DESC LIMIT 200",
+    )
+    .bind(campaignId)
+    .all();
   return result.results ?? [];
 }
 
-async function handleOpen(env: Env, recipientId: string, campaignId: string, token: string): Promise<Response> {
-  const ok = await verifyToken(env.TRACKING_SECRET, "open", [recipientId, campaignId], token);
+async function handleOpen(
+  env: Env,
+  recipientId: string,
+  campaignId: string,
+  token: string,
+): Promise<Response> {
+  const ok = await verifyToken(
+    env.TRACKING_SECRET,
+    "open",
+    [recipientId, campaignId],
+    token,
+  );
   if (!ok) {
     return new Response(null, { status: 404 });
   }
-  await new CampaignRepository(env.DB).markRecipientEvent(recipientId, "opened");
+  await new CampaignRepository(env.DB).markRecipientEvent(
+    recipientId,
+    "opened",
+  );
   const gif = transparentGif();
-  return new Response(new Blob([gif as unknown as BlobPart], { type: "image/gif" }), {
-    headers: {
-      "content-type": "image/gif",
-      "cache-control": "no-store, no-cache, must-revalidate, max-age=0"
-    }
-  });
+  return new Response(
+    new Blob([gif as unknown as BlobPart], { type: "image/gif" }),
+    {
+      headers: {
+        "content-type": "image/gif",
+        "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+      },
+    },
+  );
 }
 
-async function handleClick(env: Env, recipientId: string, linkId: string, token: string): Promise<Response> {
-  const ok = await verifyToken(env.TRACKING_SECRET, "click", [recipientId, linkId], token);
+async function handleClick(
+  env: Env,
+  recipientId: string,
+  linkId: string,
+  token: string,
+): Promise<Response> {
+  const ok = await verifyToken(
+    env.TRACKING_SECRET,
+    "click",
+    [recipientId, linkId],
+    token,
+  );
   if (!ok) {
     return new Response(null, { status: 404 });
   }
@@ -472,8 +706,17 @@ async function handleClick(env: Env, recipientId: string, linkId: string, token:
   return Response.redirect(link.url, 302);
 }
 
-async function handleUnsubscribe(env: Env, recipientId: string, token: string): Promise<Response> {
-  const ok = await verifyToken(env.TRACKING_SECRET, "unsubscribe", [recipientId], token);
+async function handleUnsubscribe(
+  env: Env,
+  recipientId: string,
+  token: string,
+): Promise<Response> {
+  const ok = await verifyToken(
+    env.TRACKING_SECRET,
+    "unsubscribe",
+    [recipientId],
+    token,
+  );
   if (!ok) {
     return new Response(null, { status: 404 });
   }
@@ -482,7 +725,11 @@ async function handleUnsubscribe(env: Env, recipientId: string, token: string): 
   if (!recipient) {
     return new Response(null, { status: 404 });
   }
-  await new ContactRepository(env.DB).suppressEmail(recipient.email, "unsubscribe", "one-click");
+  await new ContactRepository(env.DB).suppressEmail(
+    recipient.email,
+    "unsubscribe",
+    "one-click",
+  );
   await campaigns.recordEvent({ recipientId, type: "unsubscribe" });
   return unsubscribedPage();
 }
@@ -490,8 +737,17 @@ async function handleUnsubscribe(env: Env, recipientId: string, token: string): 
 // Contact-scoped unsubscribe for transactional mail (e.g. the welcome email)
 // that has no campaign_recipients row. Token purpose is distinct from the
 // recipient unsubscribe so the two can never be cross-replayed.
-async function handleContactUnsubscribe(env: Env, contactId: string, token: string): Promise<Response> {
-  const ok = await verifyToken(env.TRACKING_SECRET, "unsubscribe-contact", [contactId], token);
+async function handleContactUnsubscribe(
+  env: Env,
+  contactId: string,
+  token: string,
+): Promise<Response> {
+  const ok = await verifyToken(
+    env.TRACKING_SECRET,
+    "unsubscribe-contact",
+    [contactId],
+    token,
+  );
   if (!ok) {
     return new Response(null, { status: 404 });
   }
@@ -501,33 +757,56 @@ async function handleContactUnsubscribe(env: Env, contactId: string, token: stri
     return new Response(null, { status: 404 });
   }
   await contacts.suppressEmail(contact.email, "unsubscribe", "one-click");
-  await new CampaignRepository(env.DB).recordEvent({ contactId, type: "unsubscribe" });
+  await new CampaignRepository(env.DB).recordEvent({
+    contactId,
+    type: "unsubscribe",
+  });
   return unsubscribedPage();
 }
 
 function unsubscribedPage(): Response {
-  return new Response("<!doctype html><title>Unsubscribed</title><p>You have been unsubscribed.</p>", {
-    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
-  });
+  return new Response(
+    "<!doctype html><title>Unsubscribed</title><p>You have been unsubscribed.</p>",
+    {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
 }
 
-async function handleResendWebhook(request: Request, env: Env): Promise<Response> {
-  if (!request.headers.get("svix-id") || !request.headers.get("svix-timestamp") || !request.headers.get("svix-signature")) {
+async function handleResendWebhook(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (
+    !request.headers.get("svix-id") ||
+    !request.headers.get("svix-timestamp") ||
+    !request.headers.get("svix-signature")
+  ) {
     return json({ error: "Invalid webhook signature" }, 401);
   }
 
   const payload = await request.text();
   const resend = new Resend(env.RESEND_API_KEY);
   try {
-    await handleVerifiedResendWebhook(env.DB, payload, request.headers, env.RESEND_WEBHOOK_SECRET, (rawPayload, headers, secret) => resend.webhooks.verify({
-      payload: rawPayload,
-      headers: {
-        id: headers.get("svix-id") ?? "",
-        timestamp: headers.get("svix-timestamp") ?? "",
-        signature: headers.get("svix-signature") ?? ""
-      },
-      webhookSecret: secret
-    }));
+    await handleVerifiedResendWebhook(
+      env.DB,
+      payload,
+      request.headers,
+      env.RESEND_WEBHOOK_SECRET,
+      (rawPayload, headers, secret) =>
+        resend.webhooks.verify({
+          payload: rawPayload,
+          headers: {
+            id: headers.get("svix-id") ?? "",
+            timestamp: headers.get("svix-timestamp") ?? "",
+            signature: headers.get("svix-signature") ?? "",
+          },
+          webhookSecret: secret,
+        }),
+    );
     return json({ ok: true });
   } catch {
     return json({ error: "Invalid webhook signature" }, 401);
@@ -535,5 +814,8 @@ async function handleResendWebhook(request: Request, env: Env): Promise<Response
 }
 
 function transparentGif(): Uint8Array {
-  return Uint8Array.from(atob("R0lGODlhAQABAPAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=="), (char) => char.charCodeAt(0));
+  return Uint8Array.from(
+    atob("R0lGODlhAQABAPAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=="),
+    (char) => char.charCodeAt(0),
+  );
 }

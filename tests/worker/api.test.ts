@@ -230,6 +230,130 @@ describe("Worker API", () => {
     expect(body.error).toMatch(/automations/i);
   });
 
+  it("creates, edits, and protects automations through the admin API", async () => {
+    const createResponse = await handleRequest(new Request("https://mail.example.com/api/automations", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({ name: "Draft sequence" })
+    }), env);
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { id: string; name: string; enabled: boolean; steps: unknown[] };
+    expect(created).toMatchObject({ name: "Draft sequence", enabled: false, steps: [] });
+
+    const saveSteps = await handleRequest(new Request(`https://mail.example.com/api/automations/${created.id}/steps`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({
+        steps: [
+          { stepType: "send_email", config: { subject: "Hello", markdownBody: "Welcome" } },
+          { stepType: "wait", config: { seconds: 60 } }
+        ]
+      })
+    }), env);
+    expect(saveSteps.status).toBe(200);
+    await expect(saveSteps.json()).resolves.toMatchObject({ steps: expect.arrayContaining([expect.objectContaining({ stepType: "wait" })]) });
+
+    const rename = await handleRequest(new Request(`https://mail.example.com/api/automations/${created.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({ name: "Renamed sequence" })
+    }), env);
+    expect(rename.status).toBe(200);
+    await expect(rename.json()).resolves.toMatchObject({ name: "Renamed sequence" });
+
+    const enable = await handleRequest(new Request(`https://mail.example.com/api/automations/${created.id}/enable`, {
+      method: "POST",
+      headers: adminAuth
+    }), env);
+    expect(enable.status).toBe(200);
+
+    const blocked = await handleRequest(new Request(`https://mail.example.com/api/automations/${created.id}/steps`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({ steps: [{ stepType: "wait", config: { seconds: 30 } }] })
+    }), env);
+    expect(blocked.status).toBe(409);
+  });
+
+  it("rejects invalid automation step configs and empty enable", async () => {
+    const createResponse = await handleRequest(new Request("https://mail.example.com/api/automations", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({ name: "Empty sequence" })
+    }), env);
+    const created = await createResponse.json() as { id: string };
+
+    const invalid = await handleRequest(new Request(`https://mail.example.com/api/automations/${created.id}/steps`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({ steps: [{ stepType: "wait", config: { seconds: 0 } }] })
+    }), env);
+    expect(invalid.status).toBe(400);
+
+    const missingConfig = await handleRequest(new Request(`https://mail.example.com/api/automations/${created.id}/steps`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({ steps: [{ stepType: "wait" }] })
+    }), env);
+    expect(missingConfig.status).toBe(400);
+
+    const enableEmpty = await handleRequest(new Request(`https://mail.example.com/api/automations/${created.id}/enable`, {
+      method: "POST",
+      headers: adminAuth
+    }), env);
+    expect(enableEmpty.status).toBe(409);
+  });
+
+  it("previews an unsaved automation draft with merge tags and timing", async () => {
+    const response = await handleRequest(new Request("https://mail.example.com/api/automations/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({
+        firstName: "Ada",
+        steps: [
+          {
+            stepType: "send_email",
+            config: {
+              subject: "Hello {{first_name}}",
+              previewText: "Preview {{first_name}}",
+              markdownBody: "Hi {{first_name}},\n\nWelcome."
+            }
+          },
+          { stepType: "wait", config: { seconds: 60 } },
+          { stepType: "add_tag", config: { tagName: "previewed" } }
+        ]
+      })
+    }), env);
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      sample: { firstName: string };
+      timeline: Array<{ kind: string; timingLabel: string; subject?: string; html?: string }>;
+    };
+    expect(body.sample.firstName).toBe("Ada");
+    expect(body.timeline).toHaveLength(3);
+    expect(body.timeline[0]).toMatchObject({
+      kind: "send_email",
+      timingLabel: "Immediately",
+      subject: "Hello Ada"
+    });
+    expect(body.timeline[0].html).toContain("Ada");
+    expect(body.timeline[1]).toMatchObject({ kind: "wait", timingLabel: "Immediately" });
+    expect(body.timeline[2]).toMatchObject({ kind: "add_tag", timingLabel: "After 1 minute" });
+  });
+
+  it("returns 400 for invalid automation preview drafts", async () => {
+    const response = await handleRequest(new Request("https://mail.example.com/api/automations/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({
+        firstName: "Ada",
+        steps: [{ stepType: "send_email", config: { subject: "", markdownBody: "" } }]
+      })
+    }), env);
+    expect(response.status).toBe(400);
+  });
+
   it("ingests South & Ozarks contact messages with list tags and idempotent events", async () => {
     env.APP_BASE_URL = "https://southandozarks.autojack.ai/_emmail";
     env.EMMAIL_ADMIN_TOKEN = "admin_secret";

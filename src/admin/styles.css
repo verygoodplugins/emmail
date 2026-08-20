@@ -1,5 +1,12 @@
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   color: #24272a;
   background: #ffffff;
   font-synthesis: none;
@@ -187,6 +194,238 @@ th {
   align-items: flex-start;
 }
 
+.automation-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border-bottom: 1px solid #edf0f2;
+}
+
+.automation-list-row.selected {
+  background: #f3faf9;
+}
+
+.automation-list-select {
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  display: grid;
+  justify-items: start;
+  align-items: start;
+  gap: 4px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.automation-list-select strong {
+  font-size: 14px;
+  color: #24272a;
+}
+
+.automation-list-select span {
+  color: #687078;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.automation-row-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  align-content: start;
+}
+
+.automation-row-actions .primary,
+.automation-row-actions .danger {
+  white-space: nowrap;
+}
+
+.automation-list-actions {
+  padding: 0 16px 12px;
+}
+
+.automation-empty {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.automation-empty p {
+  margin: 0;
+  color: #687078;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.automation-editor {
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.automation-editor .form-grid {
+  padding: 0;
+}
+
+.automation-editor > .form-grid {
+  grid-template-columns: 1fr;
+}
+
+.automation-lock-notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.automation-steps {
+  display: grid;
+  gap: 12px;
+}
+
+.automation-step-card {
+  border: 1px solid #edf0f2;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.automation-step-card .form-grid {
+  padding: 0;
+}
+
+.automation-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.automation-step-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.automation-add-steps {
+  flex-wrap: wrap;
+}
+
+.automation-enrollments h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.automation-preview-actions {
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.preview-sample-name {
+  display: grid;
+  gap: 7px;
+  color: #4f5961;
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 180px;
+}
+
+.automation-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.automation-preview h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.preview-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.preview-item {
+  border: 1px solid #edf0f2;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.preview-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: baseline;
+}
+
+.preview-item-meta span {
+  color: #687078;
+  font-size: 13px;
+}
+
+.preview-email {
+  display: grid;
+  gap: 8px;
+}
+
+.preview-email p {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.preview-email p span {
+  color: #687078;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.preview-email-frame {
+  width: 100%;
+  min-height: 280px;
+  border: 1px solid #edf0f2;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.wait-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.wait-fields label {
+  display: grid;
+  gap: 7px;
+  color: #4f5961;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 6px;
+  color: #687078;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .automation-row > div {
   display: grid;
   gap: 4px;
@@ -235,9 +474,19 @@ th {
 
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   gap: 18px;
   align-items: start;
+}
+
+.content-grid.automations-layout {
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.4fr);
+}
+
+@media (max-width: 1100px) {
+  .content-grid.automations-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 .panel {
