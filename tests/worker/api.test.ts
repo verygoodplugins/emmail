@@ -164,6 +164,22 @@ describe("Worker API", () => {
       })
     }), env);
     expect(missing.status).toBe(404);
+
+    await new CampaignRepository(env.DB).updateCampaignStatus(campaign.id, "sending");
+    const sending = await handleRequest(new Request(`https://mail.example.com/api/campaigns/${campaign.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({
+        name: "Too late",
+        subject: "Too late",
+        markdownBody: "Nope",
+        audience: { listIds: ["Newsletter"], tagIds: [] }
+      })
+    }), env);
+    expect(sending.status).toBe(409);
+    await expect(sending.json()).resolves.toMatchObject({
+      error: expect.stringMatching(/draft/i)
+    });
   });
 
   it("serves admin assets and APIs under the configured sidecar base path", async () => {

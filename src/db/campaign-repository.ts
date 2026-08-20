@@ -10,6 +10,13 @@ export interface CampaignInput {
   audience: { listIds: string[]; tagIds: string[] };
 }
 
+export class CampaignConflictError extends Error {
+  constructor(message = "Campaign can only be edited while draft") {
+    super(message);
+    this.name = "CampaignConflictError";
+  }
+}
+
 export class CampaignRepository {
   constructor(private readonly db: D1Database) {}
 
@@ -47,6 +54,9 @@ export class CampaignRepository {
     const existing = await this.getCampaign(campaignId);
     if (!existing) {
       return null;
+    }
+    if (existing.status !== "draft") {
+      throw new CampaignConflictError();
     }
     const now = nowIso();
     await this.db.prepare(

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { applyMigrations, createSqliteD1 } from "../helpers/sqlite-d1";
 import { ContactRepository } from "../../src/db/contact-repository";
-import { CampaignRepository } from "../../src/db/campaign-repository";
+import { CampaignConflictError, CampaignRepository } from "../../src/db/campaign-repository";
 import {
   AutomationConflictError,
   AutomationEmptyStepsError,
@@ -198,6 +198,17 @@ describe("D1 repositories", () => {
       fromEmail: "news@example.com",
       audience: { listIds: [], tagIds: [] }
     })).toBeNull();
+
+    await campaigns.updateCampaignStatus(campaign.id, "sending");
+    await expect(campaigns.updateCampaign(campaign.id, {
+      name: "Too late",
+      subject: "Too late",
+      previewText: "",
+      markdownBody: "Nope",
+      fromName: "EmMail",
+      fromEmail: "news@example.com",
+      audience: { listIds: ["Newsletter"], tagIds: [] }
+    })).rejects.toThrow(CampaignConflictError);
   });
 });
 

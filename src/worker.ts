@@ -9,7 +9,7 @@ import {
   type StepInput,
 } from "./db/automation-repository";
 import { buildAutomationPreview } from "./email/preview-sequence";
-import { CampaignRepository } from "./db/campaign-repository";
+import { CampaignConflictError, CampaignRepository } from "./db/campaign-repository";
 import { ContactRepository } from "./db/contact-repository";
 import {
   clearSampleData,
@@ -378,7 +378,8 @@ export async function handleRequest(
   } catch (error) {
     if (
       error instanceof AutomationConflictError ||
-      error instanceof AutomationEmptyStepsError
+      error instanceof AutomationEmptyStepsError ||
+      error instanceof CampaignConflictError
     ) {
       return json({ error: error.message }, 409);
     }
