@@ -10,6 +10,13 @@ export interface CampaignInput {
   audience: { listIds: string[]; tagIds: string[] };
 }
 
+export class CampaignConflictError extends Error {
+  constructor(message = "Campaign can only be edited while draft") {
+    super(message);
+    this.name = "CampaignConflictError";
+  }
+}
+
 export class CampaignRepository {
   constructor(private readonly db: D1Database) {}
 
@@ -40,6 +47,35 @@ export class CampaignRepository {
     return campaign;
   }
 
+  async updateCampaign(
+    campaignId: string,
+    input: CampaignInput
+  ): Promise<CampaignRecord | null> {
+    const now = nowIso();
+    const result = await this.db.prepare(
+      `UPDATE campaigns
+       SET name = ?, subject = ?, preview_text = ?, markdown_body = ?,
+           audience_json = ?, updated_at = ?
+       WHERE id = ? AND status = 'draft'`
+    ).bind(
+      input.name,
+      input.subject,
+      input.previewText,
+      input.markdownBody,
+      JSON.stringify(input.audience),
+      now,
+      campaignId
+    ).run();
+    if (Number(result.meta?.changes ?? 0) === 0) {
+      const existing = await this.getCampaign(campaignId);
+      if (!existing) {
+        return null;
+      }
+      throw new CampaignConflictError();
+    }
+    return this.getCampaign(campaignId);
+  }
+
   async getCampaign(campaignId: string): Promise<CampaignRecord | null> {
     const row = await this.db.prepare("SELECT * FROM campaigns WHERE id = ?").bind(campaignId).first<CampaignRow>();
     return row ? mapCampaign(row) : null;
@@ -51,16 +87,28 @@ export class CampaignRepository {
   }
 
   async snapshotAudience(campaignId: string): Promise<{ createdRecipients: number; skippedSuppressed: number }> {
+    const now = nowIso();
+    const claimed = await this.db.prepare(
+      `UPDATE campaigns
+       SET status = 'sending', updated_at = ?
+       WHERE id = ? AND status = 'draft'`
+    ).bind(now, campaignId).run();
+
     const campaign = await this.getCampaign(campaignId);
     if (!campaign) {
       throw new Error("Campaign not found");
+    }
+    if (Number(claimed.meta?.changes ?? 0) === 0 && campaign.status === "sent") {
+      return { createdRecipients: 0, skippedSuppressed: 0 };
+    }
+    if (campaign.status !== "sending") {
+      throw new CampaignConflictError();
     }
 
     const audience = campaign.audience;
     const contacts = await this.selectAudience(audience);
     let createdRecipients = 0;
     let skippedSuppressed = 0;
-    const now = nowIso();
 
     for (const contact of contacts) {
       const suppressed = await this.db.prepare("SELECT id FROM suppressions WHERE email = ? LIMIT 1").bind(contact.email).first();
@@ -81,8 +129,9 @@ export class CampaignRepository {
       createdRecipients += Number(result.meta?.changes ?? 0);
     }
 
-    if (createdRecipients > 0) {
-      await this.updateCampaignStatus(campaignId, "sending");
+    const pending = await this.countRecipientsByStatus(campaignId, "pending");
+    if (pending === 0) {
+      await this.updateCampaignStatus(campaignId, "sent");
     }
 
     return { createdRecipients, skippedSuppressed };

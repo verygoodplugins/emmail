@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { applyMigrations, createSqliteD1 } from "../helpers/sqlite-d1";
 import { ContactRepository } from "../../src/db/contact-repository";
-import { CampaignRepository } from "../../src/db/campaign-repository";
+import { CampaignConflictError, CampaignRepository } from "../../src/db/campaign-repository";
 import {
   AutomationConflictError,
   AutomationEmptyStepsError,
@@ -85,6 +85,19 @@ describe("D1 repositories", () => {
     // Ordering ties on created_at break on the random recipient id — stable
     // across retries of the same batch, but not alphabetical.
     expect(recipients.map((recipient) => recipient.email).sort()).toEqual(["ada@example.com", "grace@example.com"]);
+    expect((await campaigns.getCampaign(campaign.id))?.status).toBe("sending");
+
+    const resumed = await campaigns.snapshotAudience(campaign.id);
+    expect(resumed.createdRecipients).toBe(0);
+    await expect(campaigns.updateCampaign(campaign.id, {
+      name: "Too late",
+      subject: "Too late",
+      previewText: "",
+      markdownBody: "Nope",
+      fromName: "EmMail",
+      fromEmail: "news@example.com",
+      audience: { listIds: ["Newsletter"], tagIds: ["vip"] }
+    })).rejects.toThrow(CampaignConflictError);
   });
 
   it("applies batch send results atomically with the batch marker", async () => {
@@ -156,6 +169,59 @@ describe("D1 repositories", () => {
       pending: 0,
       failed: 0
     });
+  });
+
+  it("updates an existing campaign's copy and audience", async () => {
+    const campaigns = new CampaignRepository(db);
+    const campaign = await campaigns.createCampaign({
+      name: "June update",
+      subject: "June update",
+      previewText: "A short note",
+      markdownBody: "Hello",
+      fromName: "EmMail",
+      fromEmail: "news@example.com",
+      audience: { listIds: ["Newsletter"], tagIds: [] }
+    });
+
+    const updated = await campaigns.updateCampaign(campaign.id, {
+      name: "July update",
+      subject: "July notes",
+      previewText: "Later note",
+      markdownBody: "Hello again",
+      fromName: "EmMail",
+      fromEmail: "news@example.com",
+      audience: { listIds: ["Newsletter"], tagIds: ["vip"] }
+    });
+
+    expect(updated).toMatchObject({
+      id: campaign.id,
+      name: "July update",
+      subject: "July notes",
+      previewText: "Later note",
+      markdownBody: "Hello again",
+      audience: { listIds: ["Newsletter"], tagIds: ["vip"] },
+      status: "draft"
+    });
+    expect(await campaigns.updateCampaign("cmp_missing", {
+      name: "Nope",
+      subject: "Nope",
+      previewText: "",
+      markdownBody: "Nope",
+      fromName: "EmMail",
+      fromEmail: "news@example.com",
+      audience: { listIds: [], tagIds: [] }
+    })).toBeNull();
+
+    await campaigns.updateCampaignStatus(campaign.id, "sending");
+    await expect(campaigns.updateCampaign(campaign.id, {
+      name: "Too late",
+      subject: "Too late",
+      previewText: "",
+      markdownBody: "Nope",
+      fromName: "EmMail",
+      fromEmail: "news@example.com",
+      audience: { listIds: ["Newsletter"], tagIds: [] }
+    })).rejects.toThrow(CampaignConflictError);
   });
 });
 

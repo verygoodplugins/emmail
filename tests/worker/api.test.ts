@@ -118,6 +118,70 @@ describe("Worker API", () => {
     });
   });
 
+  it("patches an existing campaign through the admin API", async () => {
+    const createResponse = await handleRequest(new Request("https://mail.example.com/api/campaigns", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({
+        name: "June update",
+        subject: "June update",
+        previewText: "A short note",
+        markdownBody: "Hello",
+        audience: { listIds: ["Newsletter"], tagIds: [] }
+      })
+    }), env);
+    const campaign = await createResponse.json() as { id: string };
+
+    const patchResponse = await handleRequest(new Request(`https://mail.example.com/api/campaigns/${campaign.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({
+        name: "July update",
+        subject: "July notes",
+        previewText: "Later note",
+        markdownBody: "Hello again",
+        audience: { listIds: ["Newsletter"], tagIds: ["vip"] }
+      })
+    }), env);
+
+    expect(patchResponse.status).toBe(200);
+    await expect(patchResponse.json()).resolves.toMatchObject({
+      id: campaign.id,
+      name: "July update",
+      subject: "July notes",
+      markdownBody: "Hello again",
+      audience: { listIds: ["Newsletter"], tagIds: ["vip"] }
+    });
+
+    const missing = await handleRequest(new Request("https://mail.example.com/api/campaigns/cmp_missing", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({
+        name: "Nope",
+        subject: "Nope",
+        markdownBody: "Nope",
+        audience: { listIds: [], tagIds: [] }
+      })
+    }), env);
+    expect(missing.status).toBe(404);
+
+    await new CampaignRepository(env.DB).updateCampaignStatus(campaign.id, "sending");
+    const sending = await handleRequest(new Request(`https://mail.example.com/api/campaigns/${campaign.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({
+        name: "Too late",
+        subject: "Too late",
+        markdownBody: "Nope",
+        audience: { listIds: ["Newsletter"], tagIds: [] }
+      })
+    }), env);
+    expect(sending.status).toBe(409);
+    await expect(sending.json()).resolves.toMatchObject({
+      error: expect.stringMatching(/draft/i)
+    });
+  });
+
   it("serves admin assets and APIs under the configured sidecar base path", async () => {
     env.APP_BASE_URL = "https://southandozarks.autojack.ai/_emmail";
 

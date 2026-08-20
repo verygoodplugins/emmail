@@ -9,7 +9,7 @@ import {
   type StepInput,
 } from "./db/automation-repository";
 import { buildAutomationPreview } from "./email/preview-sequence";
-import { CampaignRepository } from "./db/campaign-repository";
+import { CampaignConflictError, CampaignRepository } from "./db/campaign-repository";
 import { ContactRepository } from "./db/contact-repository";
 import {
   clearSampleData,
@@ -309,6 +309,31 @@ export async function handleRequest(
       );
       return campaign ? json(campaign) : json({ error: "Not found" }, 404);
     }
+    if (request.method === "PATCH" && campaignGetMatch) {
+      const body = await request.json<{
+        name: string;
+        subject: string;
+        previewText?: string;
+        markdownBody: string;
+        audience: { listIds?: string[]; tagIds?: string[] };
+      }>();
+      const campaign = await new CampaignRepository(env.DB).updateCampaign(
+        campaignGetMatch[1],
+        {
+          name: body.name,
+          subject: body.subject,
+          previewText: body.previewText ?? "",
+          markdownBody: body.markdownBody,
+          fromName: env.DEFAULT_FROM_NAME,
+          fromEmail: env.DEFAULT_FROM_EMAIL,
+          audience: {
+            listIds: body.audience?.listIds ?? [],
+            tagIds: body.audience?.tagIds ?? []
+          }
+        }
+      );
+      return campaign ? json(campaign) : json({ error: "Not found" }, 404);
+    }
 
     const openMatch = path.match(/^\/t\/open\/([^/]+)\/([^/]+)\/([^/]+)\.gif$/);
     if (request.method === "GET" && openMatch) {
@@ -353,7 +378,8 @@ export async function handleRequest(
   } catch (error) {
     if (
       error instanceof AutomationConflictError ||
-      error instanceof AutomationEmptyStepsError
+      error instanceof AutomationEmptyStepsError ||
+      error instanceof CampaignConflictError
     ) {
       return json({ error: error.message }, 409);
     }
