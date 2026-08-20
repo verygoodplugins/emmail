@@ -304,6 +304,29 @@ describe("Worker API", () => {
     expect(enableEmpty.status).toBe(409);
   });
 
+  it("rejects sequences with too many consecutive non-wait steps", async () => {
+    const createResponse = await handleRequest(new Request("https://mail.example.com/api/automations", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({ name: "Guard overflow" })
+    }), env);
+    const created = await createResponse.json() as { id: string };
+    const steps = Array.from({ length: 32 }, () => ({
+      stepType: "add_tag",
+      config: { tagName: "overflow" }
+    }));
+
+    const tooMany = await handleRequest(new Request(`https://mail.example.com/api/automations/${created.id}/steps`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({ steps })
+    }), env);
+    expect(tooMany.status).toBe(400);
+    await expect(tooMany.json()).resolves.toMatchObject({
+      error: expect.stringMatching(/31 consecutive non-wait/i)
+    });
+  });
+
   it("previews an unsaved automation draft with merge tags and timing", async () => {
     const response = await handleRequest(new Request("https://mail.example.com/api/automations/preview", {
       method: "POST",

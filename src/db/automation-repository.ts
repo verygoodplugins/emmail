@@ -226,6 +226,7 @@ export class AutomationRepository {
     for (const step of steps) {
       validateStepInput(step);
     }
+    assertConsecutiveNonWaitWithinGuard(steps);
 
     const now = nowIso();
     const statements: D1PreparedStatement[] = [
@@ -270,6 +271,7 @@ export class AutomationRepository {
       if (steps.length === 0) {
         throw new AutomationEmptyStepsError();
       }
+      assertConsecutiveNonWaitWithinGuard(steps);
     }
     const now = nowIso();
     await this.db
@@ -604,6 +606,30 @@ function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return slug || "sequence";
+}
+
+/**
+ * Matches processAutomationEnrollment `guard < 32`: each tick needs one extra
+ * iteration to detect completion, so 32 consecutive non-wait steps never finish.
+ */
+const MAX_CONSECUTIVE_NON_WAIT_STEPS = 31;
+
+function assertConsecutiveNonWaitWithinGuard(
+  steps: Array<{ stepType: string }>,
+): void {
+  let run = 0;
+  for (const step of steps) {
+    if (step.stepType === "wait") {
+      run = 0;
+      continue;
+    }
+    run += 1;
+    if (run > MAX_CONSECUTIVE_NON_WAIT_STEPS) {
+      throw new AutomationValidationError(
+        `Sequences cannot have more than ${MAX_CONSECUTIVE_NON_WAIT_STEPS} consecutive non-wait steps`,
+      );
+    }
+  }
 }
 
 function validateStepInput(step: StepInput): void {

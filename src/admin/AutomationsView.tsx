@@ -114,9 +114,21 @@ export function AutomationsView(props: AutomationsViewProps) {
       setEnrollments([]);
       return;
     }
+    let cancelled = false;
     void listAutomationEnrollments(selectedId)
-      .then(setEnrollments)
-      .catch(() => setEnrollments([]));
+      .then((rows) => {
+        if (!cancelled) {
+          setEnrollments(rows);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEnrollments([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedId, props.automations]);
 
   useEffect(() => {
@@ -130,6 +142,15 @@ export function AutomationsView(props: AutomationsViewProps) {
   }, [props.createSequenceRef, props.busy, props.automations]);
 
   function selectAutomation(automation: AutomationSummary) {
+    if (
+      dirty &&
+      automation.id !== selectedId &&
+      !window.confirm(
+        "You have unsaved changes. Discard them and switch sequences?",
+      )
+    ) {
+      return;
+    }
     setSelectedId(automation.id);
     setDraft(toEditorDraft(automation));
     setDirty(false);
