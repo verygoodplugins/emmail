@@ -574,6 +574,7 @@ export function App() {
 
           {tab === "automations" ? (
             <AutomationsView
+              key={selectedAutomationId || "new"}
               automations={automations}
               selectedId={selectedAutomationId}
               busy={busy}

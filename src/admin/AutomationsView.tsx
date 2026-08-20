@@ -178,9 +178,10 @@ export function AutomationsView(props: AutomationsViewProps) {
       return;
     }
     previewEpochRef.current += 1;
+    setDirty(false);
+    props.onDirtyChange(false);
     props.onSelectId(automation.id);
     setDraft(toEditorDraft(automation));
-    setDirty(false);
     setSequencePreview(null);
   }
 
