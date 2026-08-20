@@ -51,19 +51,12 @@ export class CampaignRepository {
     campaignId: string,
     input: CampaignInput
   ): Promise<CampaignRecord | null> {
-    const existing = await this.getCampaign(campaignId);
-    if (!existing) {
-      return null;
-    }
-    if (existing.status !== "draft") {
-      throw new CampaignConflictError();
-    }
     const now = nowIso();
-    await this.db.prepare(
+    const result = await this.db.prepare(
       `UPDATE campaigns
        SET name = ?, subject = ?, preview_text = ?, markdown_body = ?,
            audience_json = ?, updated_at = ?
-       WHERE id = ?`
+       WHERE id = ? AND status = 'draft'`
     ).bind(
       input.name,
       input.subject,
@@ -73,6 +66,13 @@ export class CampaignRepository {
       now,
       campaignId
     ).run();
+    if (Number(result.meta?.changes ?? 0) === 0) {
+      const existing = await this.getCampaign(campaignId);
+      if (!existing) {
+        return null;
+      }
+      throw new CampaignConflictError();
+    }
     return this.getCampaign(campaignId);
   }
 
