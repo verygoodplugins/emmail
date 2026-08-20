@@ -10,7 +10,7 @@ binding = "ASSETS"
 run_worker_first = true
 
 [vars]
-APP_BASE_URL = "https://emmail-southandozarks.very-good-plugins.workers.dev"
+APP_BASE_URL = "https://emmail.autojack.ai"
 DEFAULT_FROM_EMAIL = "southandozarks@autojack.ai"
 DEFAULT_FROM_NAME = "EmMail"
 EMMAIL_SEND_MODE = "live"
@@ -18,10 +18,11 @@ EMMAIL_SEND_MODE = "live"
 # armed welcome still only sends for real when EMMAIL_SEND_MODE = "live").
 EMMAIL_WELCOME_ENABLED = "false"
 
-# Preferred route once the Cloudflare token has Zone Workers Routes permission:
-# [[routes]]
-# pattern = "southandozarks.autojack.ai/_emmail/*"
-# zone_name = "autojack.ai"
+# Dedicated hostname. This is a Workers custom domain, not a path route on
+# southandozarks.autojack.ai. workers.dev remains as a fallback.
+[[routes]]
+pattern = "emmail.autojack.ai"
+custom_domain = true
 
 [[d1_databases]]
 binding = "DB"

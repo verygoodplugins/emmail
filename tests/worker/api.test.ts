@@ -190,6 +190,46 @@ describe("Worker API", () => {
     expect(ingest.status).toBe(200);
   });
 
+  it("seeds the welcome automation sequence through the admin API", async () => {
+    const seeded = await handleRequest(new Request("https://mail.example.com/api/automations/seed-welcome", {
+      method: "POST",
+      headers: adminAuth
+    }), env);
+    expect(seeded.status).toBe(201);
+    const body = await seeded.json() as { name: string; slug: string; enabled: boolean; steps: unknown[] };
+    expect(body).toMatchObject({
+      name: "Welcome sequence",
+      slug: "welcome-sequence",
+      enabled: false
+    });
+    expect(body.steps).toHaveLength(4);
+
+    const listed = await handleRequest(new Request("https://mail.example.com/api/automations", { headers: adminAuth }), env);
+    expect(listed.status).toBe(200);
+    await expect(listed.json()).resolves.toEqual([expect.objectContaining({ slug: "welcome-sequence", steps: expect.any(Array) })]);
+
+    const again = await handleRequest(new Request("https://mail.example.com/api/automations/seed-welcome", {
+      method: "POST",
+      headers: adminAuth
+    }), env);
+    expect(again.status).toBe(201);
+    await expect(again.json()).resolves.toMatchObject({ slug: "welcome-sequence" });
+  });
+
+  it("returns a 500 when automations tables are missing", async () => {
+    await env.DB.exec("DROP TABLE IF EXISTS automation_enrollments");
+    await env.DB.exec("DROP TABLE IF EXISTS automation_steps");
+    await env.DB.exec("DROP TABLE IF EXISTS automations");
+
+    const response = await handleRequest(new Request("https://mail.example.com/api/automations/seed-welcome", {
+      method: "POST",
+      headers: adminAuth
+    }), env);
+    expect(response.status).toBe(500);
+    const body = await response.json() as { error: string };
+    expect(body.error).toMatch(/automations/i);
+  });
+
   it("ingests South & Ozarks contact messages with list tags and idempotent events", async () => {
     env.APP_BASE_URL = "https://southandozarks.autojack.ai/_emmail";
     env.EMMAIL_ADMIN_TOKEN = "admin_secret";

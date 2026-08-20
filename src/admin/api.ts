@@ -18,9 +18,19 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     }
   });
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+    throw new Error(await errorMessage(response));
   }
   return response.json() as Promise<T>;
+}
+
+async function errorMessage(response: Response): Promise<string> {
+  const fallback = `${response.status} ${response.statusText}`;
+  try {
+    const body = await response.json() as { error?: string };
+    return body.error ? `${fallback}: ${body.error}` : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export function listContacts(): Promise<ContactRow[]> {

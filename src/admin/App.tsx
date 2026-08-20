@@ -183,6 +183,8 @@ export function App() {
       setNotice(`Seeded “${automation.name}” (${automation.steps.length} steps)`);
       await refresh();
       setTab("automations");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Seed failed");
     } finally {
       setBusy(false);
     }
@@ -195,6 +197,8 @@ export function App() {
       const automation = await setAutomationEnabled(id, enabled);
       setNotice(`${automation.name} ${enabled ? "enabled" : "disabled"}`);
       await refresh();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Toggle failed");
     } finally {
       setBusy(false);
     }
