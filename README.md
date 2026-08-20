@@ -1,15 +1,25 @@
 # EmMail
 
-Single-tenant email marketing core on Cloudflare Workers: contacts, list/tag import, broadcasts, Resend sending, suppression, unsubscribe, owned open/click tracking, and sidecar ingestion for EmDash sites.
+Single-tenant email marketing core on Cloudflare Workers: contacts, list/tag import, broadcasts, multi-step automations, Resend sending, suppression, unsubscribe, owned open/click tracking, and sidecar ingestion for EmDash sites.
+
+![EmMail admin Contacts view with sample subscribers, lists, tags, and status badges](docs/img/contacts-overview.png)
+
+**Automations** — linear sequences with email, wait, and tag steps; disable to edit; preview unsaved drafts:
+
+![EmMail Automations builder with sequence list and linear step editor for email, wait, and tags](docs/img/automations-builder.png)
+
+**Campaigns** — draft broadcasts, queue sends, and review campaign status:
+
+![EmMail Campaigns view with new broadcast draft form and sent or draft campaign list](docs/img/campaigns-overview.png)
 
 ## Stack
 
 - Cloudflare Workers for the API and public tracking endpoints
-- D1 for contacts, campaigns, events, suppressions, and import state
-- Cloudflare Queues for async broadcast fanout
+- D1 for contacts, campaigns, automations, events, suppressions, and import state
+- Cloudflare Queues for async broadcast fanout and automation wakes
 - React/Vite admin app served as Worker static assets
 - Resend for email batch sending and delivery/bounce/complaint webhooks
-- React Email for campaign rendering
+- React Email for campaign and automation rendering
 
 ## Local Setup
 
