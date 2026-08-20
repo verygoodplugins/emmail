@@ -71,6 +71,22 @@ export function createCampaign(input: {
   });
 }
 
+export function updateCampaign(
+  campaignId: string,
+  input: {
+    name: string;
+    subject: string;
+    previewText: string;
+    markdownBody: string;
+    audience: { listIds: string[]; tagIds: string[] };
+  }
+): Promise<Campaign> {
+  return requestJson<Campaign>(`/api/campaigns/${campaignId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
 export function sendCampaign(campaignId: string): Promise<{ createdRecipients: number; skippedSuppressed: number; queuedJobs: number }> {
   return requestJson(`/api/campaigns/${campaignId}/send`, { method: "POST" });
 }

@@ -157,6 +157,48 @@ describe("D1 repositories", () => {
       failed: 0
     });
   });
+
+  it("updates an existing campaign's copy and audience", async () => {
+    const campaigns = new CampaignRepository(db);
+    const campaign = await campaigns.createCampaign({
+      name: "June update",
+      subject: "June update",
+      previewText: "A short note",
+      markdownBody: "Hello",
+      fromName: "EmMail",
+      fromEmail: "news@example.com",
+      audience: { listIds: ["Newsletter"], tagIds: [] }
+    });
+
+    const updated = await campaigns.updateCampaign(campaign.id, {
+      name: "July update",
+      subject: "July notes",
+      previewText: "Later note",
+      markdownBody: "Hello again",
+      fromName: "EmMail",
+      fromEmail: "news@example.com",
+      audience: { listIds: ["Newsletter"], tagIds: ["vip"] }
+    });
+
+    expect(updated).toMatchObject({
+      id: campaign.id,
+      name: "July update",
+      subject: "July notes",
+      previewText: "Later note",
+      markdownBody: "Hello again",
+      audience: { listIds: ["Newsletter"], tagIds: ["vip"] },
+      status: "draft"
+    });
+    expect(await campaigns.updateCampaign("cmp_missing", {
+      name: "Nope",
+      subject: "Nope",
+      previewText: "",
+      markdownBody: "Nope",
+      fromName: "EmMail",
+      fromEmail: "news@example.com",
+      audience: { listIds: [], tagIds: [] }
+    })).toBeNull();
+  });
 });
 
 describe("AutomationRepository", () => {

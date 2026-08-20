@@ -40,6 +40,32 @@ export class CampaignRepository {
     return campaign;
   }
 
+  async updateCampaign(
+    campaignId: string,
+    input: CampaignInput
+  ): Promise<CampaignRecord | null> {
+    const existing = await this.getCampaign(campaignId);
+    if (!existing) {
+      return null;
+    }
+    const now = nowIso();
+    await this.db.prepare(
+      `UPDATE campaigns
+       SET name = ?, subject = ?, preview_text = ?, markdown_body = ?,
+           audience_json = ?, updated_at = ?
+       WHERE id = ?`
+    ).bind(
+      input.name,
+      input.subject,
+      input.previewText,
+      input.markdownBody,
+      JSON.stringify(input.audience),
+      now,
+      campaignId
+    ).run();
+    return this.getCampaign(campaignId);
+  }
+
   async getCampaign(campaignId: string): Promise<CampaignRecord | null> {
     const row = await this.db.prepare("SELECT * FROM campaigns WHERE id = ?").bind(campaignId).first<CampaignRow>();
     return row ? mapCampaign(row) : null;
