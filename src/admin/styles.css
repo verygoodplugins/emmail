@@ -133,9 +133,17 @@ th {
 .nav-button {
   width: 100%;
   justify-content: flex-start;
-  border-color: transparent;
+  border: 1px solid transparent;
   background: transparent;
   color: #4f5961;
+  text-decoration: none;
+  min-height: 38px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  box-sizing: border-box;
 }
 
 .nav-button svg:last-child {
@@ -157,6 +165,7 @@ th {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -219,6 +228,9 @@ th {
   padding: 0;
   background: transparent;
   text-align: left;
+  text-decoration: none;
+  color: inherit;
+  box-sizing: border-box;
 }
 
 .automation-list-select strong {
@@ -483,9 +495,18 @@ th {
   grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.4fr);
 }
 
+.content-grid.campaigns-layout {
+  grid-template-columns: minmax(280px, 0.92fr) minmax(0, 1.18fr);
+}
+
 @media (max-width: 1100px) {
-  .content-grid.automations-layout {
+  .content-grid.automations-layout,
+  .content-grid.campaigns-layout {
     grid-template-columns: 1fr;
+  }
+
+  .campaigns-layout:has(.campaigns-editor.is-editing) .campaigns-editor {
+    order: -1;
   }
 }
 
@@ -513,9 +534,11 @@ th {
 
 .panel-head h2 {
   margin: 0;
+  min-width: 0;
   color: #24272a;
   font-size: 16px;
   line-height: 22px;
+  overflow-wrap: anywhere;
 }
 
 .table-wrap {
@@ -648,16 +671,32 @@ th {
   grid-column: 1 / -1;
 }
 
-.campaign-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid #edf0f2;
+.campaign-list {
+  container-type: inline-size;
+  container-name: campaign-list;
 }
 
-.campaign-row > button:first-child {
+.campaign-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "main meta"
+    "events events";
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #edf0f2;
+  min-width: 0;
+}
+
+.campaign-row.selected {
+  background: #f3faf9;
+}
+
+.campaign-row-main {
+  grid-area: main;
+  min-width: 0;
   min-height: 0;
   display: grid;
   justify-items: start;
@@ -665,15 +704,116 @@ th {
   border: 0;
   padding: 0;
   background: transparent;
+  text-decoration: none;
+  color: inherit;
+}
+
+.campaign-row-main:hover strong {
+  color: #0f766e;
 }
 
 .campaign-row strong {
   font-size: 14px;
 }
 
-.campaign-row span {
+.campaign-row-main strong,
+.campaign-row-main span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaign-row-main span {
   color: #687078;
   font-size: 13px;
+}
+
+.campaign-row-meta {
+  grid-area: meta;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.campaign-events-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: #4f5961;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.campaign-events-summary.row {
+  grid-area: events;
+  background: #fbfcfc;
+  border: 1px solid #edf0f2;
+}
+
+.campaign-events-summary.panel {
+  margin: 0 16px 12px;
+  border: 1px solid #edf0f2;
+}
+
+.campaign-events-summary:hover {
+  background: #e9f7f5;
+  color: #0f766e;
+}
+
+.campaign-events-rates {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.campaign-events-label {
+  font-weight: 700;
+  color: #0f766e;
+  margin-left: auto;
+}
+
+.campaign-sparkline {
+  height: 16px;
+  width: 72px;
+  flex: 0 0 72px;
+  display: grid;
+  align-content: end;
+  gap: 3px;
+  background:
+    linear-gradient(#edf0f2, #edf0f2) left bottom / 100% 5px no-repeat,
+    linear-gradient(#edf0f2, #edf0f2) left calc(100% - 8px) / 100% 5px no-repeat;
+}
+
+@container campaign-list (min-width: 640px) {
+  .campaign-row {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 280px) auto;
+    grid-template-areas: "main events meta";
+  }
+
+  .campaign-events-label {
+    margin-left: 0;
+  }
+}
+
+.campaign-sparkline span {
+  display: block;
+  height: 5px;
+  min-width: 4px;
+  border-radius: 2px;
+}
+
+.campaign-sparkline span:first-child {
+  background: #0f766e;
+}
+
+.campaign-sparkline span:last-child {
+  background: #d97706;
 }
 
 .mini-chart {
@@ -728,8 +868,17 @@ th {
     margin-bottom: 12px;
   }
 
+  .main {
+    padding: 16px;
+  }
+
+  .topbar h1 {
+    font-size: 24px;
+    line-height: 30px;
+  }
+
   .nav-list {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .nav-button {

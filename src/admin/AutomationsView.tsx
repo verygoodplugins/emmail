@@ -18,6 +18,7 @@ import {
   seedWelcomeAutomation,
   setAutomationEnabled,
 } from "./api";
+import { automationEditorHash } from "./route";
 import type {
   AutomationEnrollment,
   AutomationPreviewResult,
@@ -38,21 +39,24 @@ interface EditorDraft {
 
 interface AutomationsViewProps {
   automations: AutomationSummary[];
+  selectedId: string;
   busy: boolean;
   createSequenceRef: MutableRefObject<(() => void) | null>;
   onBusyChange: (busy: boolean) => void;
   onDirtyChange: (dirty: boolean) => void;
   onNotice: (message: string) => void;
   onRefresh: () => Promise<void>;
+  onSelectId: (id: string) => void;
 }
 
 export function AutomationsView(props: AutomationsViewProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(
-    () => props.automations[0]?.id ?? null,
-  );
-  const [draft, setDraft] = useState<EditorDraft | null>(() =>
-    props.automations[0] ? toEditorDraft(props.automations[0]) : null,
-  );
+  const selectedId = props.selectedId || null;
+  const [draft, setDraft] = useState<EditorDraft | null>(() => {
+    const current =
+      props.automations.find((automation) => automation.id === props.selectedId) ??
+      props.automations[0];
+    return current ? toEditorDraft(current) : null;
+  });
   const [dirty, setDirty] = useState(false);
   const [enrollments, setEnrollments] = useState<AutomationEnrollment[]>([]);
   const [sampleFirstName, setSampleFirstName] = useState("Ada");
@@ -95,7 +99,6 @@ export function AutomationsView(props: AutomationsViewProps) {
 
   useEffect(() => {
     if (props.automations.length === 0) {
-      setSelectedId(null);
       setDraft(null);
       setDirty(false);
       setEnrollments([]);
@@ -107,9 +110,6 @@ export function AutomationsView(props: AutomationsViewProps) {
       props.automations.some((automation) => automation.id === selectedId)
         ? selectedId
         : props.automations[0].id;
-    if (currentId !== selectedId) {
-      setSelectedId(currentId);
-    }
     const current = props.automations.find(
       (automation) => automation.id === currentId,
     )!;
@@ -178,7 +178,7 @@ export function AutomationsView(props: AutomationsViewProps) {
       return;
     }
     previewEpochRef.current += 1;
-    setSelectedId(automation.id);
+    props.onSelectId(automation.id);
     setDraft(toEditorDraft(automation));
     setDirty(false);
     setSequencePreview(null);
@@ -199,7 +199,7 @@ export function AutomationsView(props: AutomationsViewProps) {
       const automation = await createAutomation("New sequence");
       await props.onRefresh();
       previewEpochRef.current += 1;
-      setSelectedId(automation.id);
+      props.onSelectId(automation.id);
       setDraft(toEditorDraft(automation));
       setDirty(false);
       setSequencePreview(null);
@@ -226,7 +226,7 @@ export function AutomationsView(props: AutomationsViewProps) {
       const automation = await seedWelcomeAutomation();
       await props.onRefresh();
       previewEpochRef.current += 1;
-      setSelectedId(automation.id);
+      props.onSelectId(automation.id);
       setDraft(toEditorDraft(automation));
       setDirty(false);
       setSequencePreview(null);
@@ -444,10 +444,22 @@ export function AutomationsView(props: AutomationsViewProps) {
                     className={`automation-list-row ${automation.id === selectedId ? "selected" : ""}`}
                     key={automation.id}
                   >
-                    <button
-                      type="button"
+                    <a
+                      href={automationEditorHash(automation.id)}
                       className="automation-list-select"
-                      onClick={() => selectAutomation(automation)}
+                      onClick={(event) => {
+                        if (
+                          event.metaKey ||
+                          event.ctrlKey ||
+                          event.shiftKey ||
+                          event.altKey ||
+                          event.button !== 0
+                        ) {
+                          return;
+                        }
+                        event.preventDefault();
+                        selectAutomation(automation);
+                      }}
                     >
                       <strong>{automation.name}</strong>
                       <span>{triggerLabel(automation.triggerType)}</span>
@@ -455,7 +467,7 @@ export function AutomationsView(props: AutomationsViewProps) {
                         {automation.steps.length} steps · {inFlight} in flight ·{" "}
                         {automation.enrollmentCounts.completed} done
                       </span>
-                    </button>
+                    </a>
                     <div className="automation-row-actions">
                       <StatusLabel
                         value={automation.enabled ? "enabled" : "draft"}
