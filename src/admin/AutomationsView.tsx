@@ -667,7 +667,11 @@ export function AutomationsView(props: AutomationsViewProps) {
                           <td>
                             <StatusLabel value={enrollment.status} />
                           </td>
-                          <td>{enrollment.currentPosition + 1}</td>
+                          <td>
+                            {enrollment.status === "completed"
+                              ? "—"
+                              : enrollment.currentPosition + 1}
+                          </td>
                           <td>
                             {enrollment.nextRunAt
                               ? new Date(enrollment.nextRunAt).toLocaleString()

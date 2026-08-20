@@ -207,10 +207,15 @@ export class AutomationRepository {
     if (!trimmed) {
       throw new AutomationValidationError("Automation name is required");
     }
-    await this.db
-      .prepare("UPDATE automations SET name = ?, updated_at = ? WHERE id = ?")
+    const result = await this.db
+      .prepare(
+        "UPDATE automations SET name = ?, updated_at = ? WHERE id = ? AND enabled = 0",
+      )
       .bind(trimmed, nowIso(), id)
       .run();
+    if ((result.meta?.changes ?? 0) !== 1) {
+      throw new AutomationConflictError();
+    }
     return this.getAutomationSummary(id);
   }
 
