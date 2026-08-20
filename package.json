@@ -41,14 +41,14 @@
     "@react-email/render": "^1.2.0",
     "lucide-react": "^0.468.0",
     "marked": "^15.0.3",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "resend": "^6.9.2"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "resend": "^6.20.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260820.1",
-    "@types/react": "^19.0.1",
-    "@types/react-dom": "^19.0.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "@types/sql.js": "^1.4.9",
     "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^9.2.0",
