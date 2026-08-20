@@ -60,8 +60,10 @@ export function AutomationsView(props: AutomationsViewProps) {
   const [sequencePreview, setSequencePreview] =
     useState<AutomationPreviewResult | null>(null);
   const selectedIdRef = useRef(selectedId);
+  const dirtyRef = useRef(dirty);
   const previewEpochRef = useRef(0);
   selectedIdRef.current = selectedId;
+  dirtyRef.current = dirty;
 
   useEffect(() => {
     props.onDirtyChange(dirty);
@@ -154,7 +156,7 @@ export function AutomationsView(props: AutomationsViewProps) {
 
   function selectAutomation(automation: AutomationSummary) {
     if (
-      dirty &&
+      dirtyRef.current &&
       automation.id !== selectedId &&
       !window.confirm(
         "You have unsaved changes. Discard them and switch sequences?",
@@ -171,7 +173,7 @@ export function AutomationsView(props: AutomationsViewProps) {
 
   async function handleNewSequence() {
     if (
-      dirty &&
+      dirtyRef.current &&
       !window.confirm(
         "You have unsaved changes. Discard them and create a new sequence?",
       )
@@ -198,7 +200,7 @@ export function AutomationsView(props: AutomationsViewProps) {
 
   async function handleSeedWelcome() {
     if (
-      dirty &&
+      dirtyRef.current &&
       !window.confirm(
         "You have unsaved changes. Discard them and seed the welcome sequence?",
       )

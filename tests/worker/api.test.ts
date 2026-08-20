@@ -323,7 +323,7 @@ describe("Worker API", () => {
     }), env);
     expect(tooMany.status).toBe(400);
     await expect(tooMany.json()).resolves.toMatchObject({
-      error: expect.stringMatching(/31 consecutive non-wait/i)
+      error: expect.stringMatching(/30 consecutive non-wait/i)
     });
   });
 

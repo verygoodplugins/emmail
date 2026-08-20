@@ -92,14 +92,19 @@ export function App() {
     campaigns[0];
 
   async function refresh() {
-    const [contactRows, campaignRows, automationRows] = await Promise.all([
+    const [contactRows, campaignRows, automationResult] = await Promise.all([
       listContacts(),
       listCampaigns(),
-      listAutomations().catch(() => [] as AutomationSummary[]),
+      listAutomations().then(
+        (rows) => ({ ok: true as const, rows }),
+        () => ({ ok: false as const }),
+      ),
     ]);
     setContacts(contactRows);
     setCampaigns(campaignRows);
-    setAutomations(automationRows);
+    if (automationResult.ok) {
+      setAutomations(automationResult.rows);
+    }
     const nextCampaignId =
       selectedCampaignId &&
       campaignRows.some((campaign) => campaign.id === selectedCampaignId)

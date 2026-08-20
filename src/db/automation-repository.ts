@@ -609,10 +609,12 @@ function slugify(name: string): string {
 }
 
 /**
- * Matches processAutomationEnrollment `guard < 32`: each tick needs one extra
- * iteration to detect completion, so 32 consecutive non-wait steps never finish.
+ * Matches processAutomationEnrollment `guard < 32`.
+ * A wake that advances a due wait spends one iteration first, so a post-wait
+ * run of 31 non-wait steps cannot complete before the guard trips. Cap all
+ * consecutive non-wait runs at 30.
  */
-const MAX_CONSECUTIVE_NON_WAIT_STEPS = 31;
+const MAX_CONSECUTIVE_NON_WAIT_STEPS = 30;
 
 function assertConsecutiveNonWaitWithinGuard(
   steps: Array<{ stepType: string }>,
