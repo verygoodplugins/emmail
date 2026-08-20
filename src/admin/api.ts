@@ -109,10 +109,17 @@ export function updateAutomationName(id: string, name: string): Promise<Automati
   });
 }
 
-export function replaceAutomationSteps(id: string, steps: StepDraft[]): Promise<AutomationSummary> {
+export function replaceAutomationSteps(
+  id: string,
+  steps: StepDraft[],
+  options: { name?: string } = {},
+): Promise<AutomationSummary> {
   return requestJson<AutomationSummary>(`/api/automations/${id}/steps`, {
     method: "PUT",
-    body: JSON.stringify({ steps })
+    body: JSON.stringify({
+      steps,
+      ...(options.name === undefined ? {} : { name: options.name }),
+    }),
   });
 }
 

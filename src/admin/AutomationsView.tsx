@@ -17,7 +17,6 @@ import {
   replaceAutomationSteps,
   seedWelcomeAutomation,
   setAutomationEnabled,
-  updateAutomationName,
 } from "./api";
 import type {
   AutomationEnrollment,
@@ -71,6 +70,20 @@ export function AutomationsView(props: AutomationsViewProps) {
       props.onDirtyChange(false);
     };
   }, [dirty, props.onDirtyChange]);
+
+  useEffect(() => {
+    if (!dirty) {
+      return;
+    }
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [dirty]);
 
   const welcomeExists = useMemo(
     () =>
@@ -260,14 +273,9 @@ export function AutomationsView(props: AutomationsViewProps) {
     props.onNotice("");
     try {
       const savedName = draft.name.trim() || "Untitled sequence";
-      // Persist steps first so an invalid draft cannot leave a renamed row behind.
-      let saved = await replaceAutomationSteps(draft.id, draft.steps);
-      const current = props.automations.find(
-        (automation) => automation.id === draft.id,
-      );
-      if (!current || current.name !== savedName) {
-        saved = await updateAutomationName(draft.id, savedName);
-      }
+      const saved = await replaceAutomationSteps(draft.id, draft.steps, {
+        name: savedName,
+      });
       await props.onRefresh();
       if (
         selectedIdRef.current !== saveForId ||

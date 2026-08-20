@@ -217,6 +217,7 @@ export class AutomationRepository {
   async replaceSteps(
     id: string,
     steps: StepInput[],
+    options: { name?: string } = {},
   ): Promise<AutomationSummary | null> {
     const automation = await this.getAutomation(id);
     if (!automation) {
@@ -227,6 +228,12 @@ export class AutomationRepository {
       validateStepInput(step);
     }
     assertConsecutiveNonWaitWithinGuard(steps);
+
+    const trimmedName =
+      options.name === undefined ? null : options.name.trim();
+    if (options.name !== undefined && !trimmedName) {
+      throw new AutomationValidationError("Automation name is required");
+    }
 
     const now = nowIso();
     // Conditional mutations so a concurrent enable cannot leave the sequence
@@ -261,11 +268,17 @@ export class AutomationRepository {
       );
     }
     statements.push(
-      this.db
-        .prepare(
-          "UPDATE automations SET updated_at = ? WHERE id = ? AND enabled = 0",
-        )
-        .bind(now, id),
+      trimmedName
+        ? this.db
+            .prepare(
+              "UPDATE automations SET name = ?, updated_at = ? WHERE id = ? AND enabled = 0",
+            )
+            .bind(trimmedName, now, id)
+        : this.db
+            .prepare(
+              "UPDATE automations SET updated_at = ? WHERE id = ? AND enabled = 0",
+            )
+            .bind(now, id),
     );
     const results = await this.db.batch(statements);
     const touched = results[results.length - 1]?.meta?.changes ?? 0;
@@ -691,8 +704,16 @@ function validateStepInput(step: StepInput): void {
   }
   if (step.stepType === "wait") {
     const seconds = Number(step.config.seconds ?? 0);
-    if (!Number.isFinite(seconds) || seconds <= 0) {
-      throw new AutomationValidationError("wait steps require seconds > 0");
+    // Cap so Date.now() + seconds*1000 stays representable for toISOString().
+    const maxWaitSeconds = 60 * 60 * 24 * 365 * 10;
+    if (
+      !Number.isFinite(seconds) ||
+      seconds <= 0 ||
+      seconds > maxWaitSeconds
+    ) {
+      throw new AutomationValidationError(
+        `wait steps require seconds between 1 and ${maxWaitSeconds}`,
+      );
     }
     return;
   }

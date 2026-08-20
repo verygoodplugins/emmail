@@ -168,13 +168,14 @@ export async function handleRequest(
       /^\/api\/automations\/([^/]+)\/steps$/,
     );
     if (request.method === "PUT" && automationStepsMatch) {
-      const body = await request.json<{ steps: StepInput[] }>();
+      const body = await request.json<{ steps: StepInput[]; name?: string }>();
       const automation = await new AutomationRepository(env.DB).replaceSteps(
         automationStepsMatch[1],
         (body.steps ?? []).map((step) => ({
           stepType: step.stepType as AutomationStepType,
           config: step.config,
         })),
+        body.name === undefined ? {} : { name: body.name },
       );
       return automation ? json(automation) : json({ error: "Not found" }, 404);
     }

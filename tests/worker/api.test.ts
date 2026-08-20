@@ -327,6 +327,50 @@ describe("Worker API", () => {
     });
   });
 
+  it("rejects wait steps that cannot be scheduled", async () => {
+    const createResponse = await handleRequest(new Request("https://mail.example.com/api/automations", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({ name: "Huge wait" })
+    }), env);
+    const created = await createResponse.json() as { id: string };
+
+    const hugeWait = await handleRequest(new Request(`https://mail.example.com/api/automations/${created.id}/steps`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({
+        steps: [{ stepType: "wait", config: { seconds: 1e20 } }]
+      })
+    }), env);
+    expect(hugeWait.status).toBe(400);
+    await expect(hugeWait.json()).resolves.toMatchObject({
+      error: expect.stringMatching(/seconds between/i)
+    });
+  });
+
+  it("saves automation name and steps in one request", async () => {
+    const createResponse = await handleRequest(new Request("https://mail.example.com/api/automations", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({ name: "Draft rename" })
+    }), env);
+    const created = await createResponse.json() as { id: string };
+
+    const saved = await handleRequest(new Request(`https://mail.example.com/api/automations/${created.id}/steps`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...adminAuth },
+      body: JSON.stringify({
+        name: "Atomic rename",
+        steps: [{ stepType: "wait", config: { seconds: 30 } }]
+      })
+    }), env);
+    expect(saved.status).toBe(200);
+    await expect(saved.json()).resolves.toMatchObject({
+      name: "Atomic rename",
+      steps: [expect.objectContaining({ stepType: "wait" })]
+    });
+  });
+
   it("previews an unsaved automation draft with merge tags and timing", async () => {
     const response = await handleRequest(new Request("https://mail.example.com/api/automations/preview", {
       method: "POST",
