@@ -43,7 +43,7 @@
     "marked": "^15.0.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "resend": "^6.20.0"
+    "resend": "^6.22.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260820.1",
