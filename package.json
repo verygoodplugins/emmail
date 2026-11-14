@@ -37,8 +37,8 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
-    "@react-email/components": "^0.0.41",
-    "@react-email/render": "^1.2.0",
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.3.1",
     "lucide-react": "^0.468.0",
     "marked": "^15.0.3",
     "react": "^19.2.8",
@@ -63,6 +63,7 @@
   },
   "overrides": {
     "esbuild": "^0.28.1",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "@react-email/render": "$@react-email/render"
   }
 }
